@@ -1,6 +1,6 @@
 // app/api/cbt/route.js
 import { NextResponse } from "next/server";
-import { turso } from "@/lib/turso";
+import { turso } from "../../../lib/turso";
 
 export async function POST(req) {
   try {
