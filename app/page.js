@@ -12,6 +12,156 @@ export default function Page() {
     if (typeof window === "undefined" || window.appInitialized) return;
     window.appInitialized = true;
 
+    const LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
+
+    // =================================================================
+    // 1. FUNGSI NATIVE UI (ANTI-MACET & DIJAMIN LANGSUNG JALAN)
+    // =================================================================
+    
+    // Fungsi Tombol Mata (Bypass jQuery)
+    window.togglePwd = function() {
+        const p = document.getElementById('p-login');
+        const icon = document.getElementById('togglePassword');
+        if (!p || !icon) return;
+        
+        if (p.type === 'password') {
+            p.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            p.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    };
+
+    // Fungsi Loading
+    window.showLoad = function(show) {
+        const loader = document.getElementById('loader');
+        if (loader) {
+            if (show) loader.classList.remove('hidden');
+            else loader.classList.add('hidden');
+        }
+    };
+
+    // Fungsi Fetch Login Langsung (Sangat Cepat & Anti-Reload)
+    window.handleLogin = async function() {
+        const u = document.getElementById('u-login').value;
+        const p = document.getElementById('p-login').value;
+
+        if (!u || !p) {
+            alert("Username dan Password wajib diisi!");
+            return;
+        }
+
+        window.showLoad(true);
+
+        try {
+            const res = await fetch("/api/cbt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "loginUser", args: [u, p] })
+            });
+
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(`Server Error: ${txt}`);
+            }
+
+            const data = await res.json();
+            window.showLoad(false);
+
+            if (data.status === 'success') {
+                window.user = data.data;
+                window.user.LogoUrl = LOGO_BARU;
+                localStorage.setItem('cbt_user', JSON.stringify(window.user));
+                
+                const logoEl = document.querySelector('#logo-container img');
+                if(logoEl) logoEl.src = LOGO_BARU;
+                
+                window.initDash(); // Masuk ke Dashboard
+            } else {
+                if (window.Swal) window.Swal.fire('Gagal Login', data.msg, 'error');
+                else alert("Gagal Login: " + data.msg);
+            }
+        } catch (err) {
+            window.showLoad(false);
+            console.error(err);
+            if (window.Swal) window.Swal.fire('Koneksi Gagal', 'Gagal terhubung ke database. Detail: ' + err.message, 'error');
+            else alert('Koneksi Gagal: ' + err.message);
+        }
+    };
+
+    window.handleLogout = function() {
+        const executeLogout = () => {
+            if(window.stopContinuousBeep) window.stopContinuousBeep();
+            localStorage.removeItem('cbt_user'); localStorage.removeItem('cbt_active_exam'); window.user = null;
+            if(window.timerInt) clearInterval(window.timerInt); 
+            if(window.monitorInterval) clearInterval(window.monitorInterval); 
+            if(window.autosaveInterval) clearInterval(window.autosaveInterval); 
+            window.activeExamId = null;
+            
+            document.getElementById('view-dashboard').classList.add('hidden'); 
+            document.getElementById('view-exam').classList.add('hidden'); 
+            document.body.classList.remove('exam-mode');
+            
+            document.getElementById('u-login').value = ''; 
+            document.getElementById('p-login').value = ''; 
+            document.getElementById('view-auth').style.display = 'flex'; 
+            
+            const sb = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            if(sb) sb.classList.remove('active');
+            if(overlay) overlay.classList.remove('active');
+        };
+
+        if (window.Swal) {
+            window.Swal.fire({ title: 'Logout?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya', cancelButtonText: 'Batal' }).then((r) => {
+                if(r.isConfirmed) executeLogout();
+            });
+        } else {
+            if (confirm("Apakah Anda yakin ingin logout?")) executeLogout();
+        }
+    };
+
+    // Fungsi Deteksi Role Akun (Admin / Guru / Siswa)
+    window.initDash = function() {
+        if(!window.user) return;
+        
+        document.getElementById('view-auth').style.display = 'none'; 
+        document.getElementById('view-dashboard').classList.remove('hidden'); 
+        
+        const uNameDisp = document.getElementById('u-name-disp');
+        if(uNameDisp) uNameDisp.innerText = window.user.Nama;
+        
+        const role = String(window.user.Role || '').trim().toLowerCase(); 
+        const roleDisp = document.getElementById('user-role-disp');
+        if(roleDisp) roleDisp.innerText = role.toUpperCase();
+        
+        // Sembunyikan semua menu terlebih dahulu
+        document.querySelectorAll('.components').forEach(el => el.classList.add('hidden'));
+        
+        // Munculkan menu berdasarkan Role yang Login
+        if(role === 'siswa') { 
+            document.getElementById('menu-siswa').classList.remove('hidden'); 
+            window.loadPage('siswa-home'); 
+        } 
+        else if(role === 'guru') { 
+            document.getElementById('menu-guru').classList.remove('hidden'); 
+            window.loadPage('admin-home'); 
+        } 
+        else if(role === 'admin') { 
+            document.getElementById('menu-admin').classList.remove('hidden'); 
+            window.loadPage('admin-home'); 
+        } 
+        else { 
+            alert('Akses Ditolak: Role akun Anda tidak dikenali sistem.'); 
+        }
+    };
+
+    // =================================================================
+    // 2. INISIALISASI JQUERY, SISTEM UJIAN & PROXY
+    // =================================================================
     const initApp = () => {
       if (!window.jQuery || !window.Swal) {
         setTimeout(initApp, 100);
@@ -19,58 +169,47 @@ export default function Page() {
       }
 
       const $ = window.jQuery;
-      const LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
 
-      // =========================================================
-      // PROXY API: PENGGANTI GOOGLE.SCRIPT.RUN (ANTI-MACET 100%)
-      // =========================================================
       window.google = {
         script: {
-          get run() {
-            // Setiap panggilan membuat instance handler baru, sehingga tidak saling tindih
-            const runner = {
-              successFn: null,
-              failureFn: null,
-              withSuccessHandler: function (fn) { this.successFn = fn; return this; },
-              withFailureHandler: function (fn) { this.failureFn = fn; return this; }
-            };
-
-            return new Proxy(runner, {
-              get: function (target, prop) {
-                if (prop in target) return target[prop];
-                
-                return function (...args) {
-                  fetch("/api/cbt", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: prop, args: args }),
-                  })
-                    .then(async (r) => {
-                       if (!r.ok) throw new Error(await r.text());
-                       return r.json();
-                    })
-                    .then((res) => { 
-                        if (target.successFn) target.successFn(res); 
-                    })
-                    .catch((err) => { 
-                        console.error("API Fetch Error:", err);
-                        if (window.showLoad) window.showLoad(false); 
-                        if (target.failureFn) target.failureFn(err); 
-                        else if (window.Swal) window.Swal.fire("Error Server", "Gagal menghubungi database: " + err.message, "error");
-                        else alert("Gagal menghubungi server.");
-                    });
-                };
+          run: new Proxy({}, {
+            get: function (target, prop) {
+              if (prop === "withSuccessHandler") {
+                return function (fn) { target.successFn = fn; return new Proxy(target, this); }.bind(this);
               }
-            });
-          }
-        }
+              if (prop === "withFailureHandler") {
+                return function (fn) { target.failureFn = fn; return new Proxy(target, this); }.bind(this);
+              }
+              return function (...args) {
+                fetch("/api/cbt", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: prop, args: args }),
+                })
+                  .then(async (r) => {
+                     if (!r.ok) {
+                         const txt = await r.text();
+                         throw new Error(`Server Error (${r.status}): ${txt}`);
+                     }
+                     return r.json();
+                  })
+                  .then((res) => { 
+                      if (target.successFn) target.successFn(res); 
+                  })
+                  .catch((err) => { 
+                      console.error("API Fetch Error:", err);
+                      window.showLoad(false); 
+                      if (target.failureFn) target.failureFn(err); 
+                      else window.Swal.fire("Koneksi Gagal", err.message, "error");
+                  });
+              };
+            },
+          }),
+        },
       };
 
-      // ==========================================
-      // ORIGINAL JAVASCRIPT LOGIC
-      // ==========================================
+      // State Global
       window.examSubmitting = false;
-      window.user = null;
       window.gData = {};
       window.gAdminData = { exams: [], users: [] };
       window.activeExamId = null;
@@ -89,92 +228,90 @@ export default function Page() {
       let finalBeepOsc = null;
       let beepInterval = null;
 
-      // ==========================================
-      // NATIVE UI FUNCTIONS (ANTI-RELOAD)
-      // ==========================================
-      window.showLoad = function(show) {
-          const loader = document.getElementById('loader');
-          if (loader) {
-              if (show) loader.classList.remove('hidden');
-              else loader.classList.add('hidden');
-          }
-      };
-
-      window.togglePwd = function() {
-          const p = document.getElementById('p-login');
-          const icon = document.getElementById('togglePassword');
-          if (!p || !icon) return;
-          if (p.type === 'password') {
-              p.type = 'text';
-              icon.classList.remove('fa-eye');
-              icon.classList.add('fa-eye-slash');
-          } else {
-              p.type = 'password';
-              icon.classList.remove('fa-eye-slash');
-              icon.classList.add('fa-eye');
-          }
-      };
-
-      window.handleLogin = function() {
-          if (!window.google || !window.Swal) {
-              alert("Sistem sedang memuat komponen, mohon tunggu sebentar.");
+      window.playBeep = function(times, continuous = false) {
+          if(audioCtx.state === 'suspended') audioCtx.resume();
+          if (continuous) {
+              finalBeepOsc = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              finalBeepOsc.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              finalBeepOsc.type = 'square';
+              finalBeepOsc.frequency.value = 800;
+              gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
+              finalBeepOsc.start();
               return;
           }
-          const u = document.getElementById('u-login').value;
-          const p = document.getElementById('p-login').value;
-
-          if(!u || !p) {
-              window.Swal.fire('Perhatian', 'Username dan Password wajib diisi!', 'warning');
-              return;
+          let count = 0;
+          function beep() {
+              if (count >= times) return;
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              oscillator.type = 'square';
+              oscillator.frequency.value = 800;
+              gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
+              oscillator.start(audioCtx.currentTime);
+              oscillator.stop(audioCtx.currentTime + 0.3);
+              count++;
+              setTimeout(beep, 600);
           }
+          beep();
+      }
 
-          window.showLoad(true);
-          window.google.script.run.withSuccessHandler(res => {
-              window.showLoad(false);
-              if(res.status === 'success') {
-                  window.user = res.data; 
-                  window.user.LogoUrl = LOGO_BARU; 
-                  localStorage.setItem('cbt_user', JSON.stringify(window.user));
-                  const logoEl = document.querySelector('#logo-container img');
-                  if(logoEl) logoEl.src = LOGO_BARU;
-                  window.initDash();
-              } else {
-                  window.Swal.fire('Gagal Login', res.msg, 'error');
-              }
-          }).withFailureHandler(err => {
-              window.showLoad(false); 
-              window.Swal.fire('Koneksi Terputus', err.message, 'error');
-          }).loginUser(u, p);
-      };
+      window.stopContinuousBeep = function() {
+          if (finalBeepOsc) { try { finalBeepOsc.stop(); finalBeepOsc.disconnect(); } catch(e){} finalBeepOsc = null; }
+          if (beepInterval) { clearTimeout(beepInterval); beepInterval = null; }
+      }
 
-      window.handleLogout = function() {
-          window.Swal.fire({ title: 'Logout?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya', cancelButtonText: 'Batal' }).then((r) => {
-              if(r.isConfirmed) {
-                  window.stopContinuousBeep();
-                  localStorage.removeItem('cbt_user'); localStorage.removeItem('cbt_active_exam'); window.user = null;
-                  clearInterval(window.timerInt); clearInterval(window.monitorInterval); clearInterval(window.autosaveInterval); window.activeExamId = null;
-                  $('#view-dashboard').addClass('hidden'); $('#view-exam').addClass('hidden'); $('body').removeClass('exam-mode');
-                  $('#u-login').val(''); $('#p-login').val(''); 
-                  $('#view-auth').css('display', 'flex'); 
-                  $('#sidebar').removeClass('active'); $('#sidebar-overlay').removeClass('active');
+      const MathButton = function (context) {
+          const ui = $.summernote.ui;
+          const button = ui.button({
+              contents: '<i class="fas fa-square-root-alt"></i> Rumus',
+              tooltip: 'Tambahkan Rumus Matematika (LaTeX)',
+              click: function () {
+                  window.Swal.fire({
+                      title: 'Editor Rumus (LaTeX)',
+                      html: `<div class="text-start small mb-2 text-muted">Ketik format LaTeX manual:</div><textarea id="swal-math-input" class="form-control font-monospace" rows="3"></textarea>`,
+                      showCancelButton: true, confirmButtonText: 'Sisipkan Rumus'
+                  }).then((result) => {
+                      if (result.isConfirmed) {
+                          const mathText = $('#swal-math-input').val();
+                          if(mathText) context.invoke('editor.insertText', ` $$ ${mathText} $$ `);
+                      }
+                  });
               }
           });
+          return button.render();
+      }
+
+      const snConfig = { 
+          height: 180, 
+          toolbar: [['style', ['bold', 'italic', 'underline', 'clear']], ['para', ['ul', 'ol']], ['insert', ['picture', 'table', 'link', 'math']]],
+          buttons: { math: MathButton }
       };
 
-      window.initDash = function() {
-          if(!window.user) return;
-          $('#view-auth').hide(); 
-          $('#view-dashboard').removeClass('hidden'); 
-          $('#u-name-disp').text(window.user.Nama);
-          const role = String(window.user.Role || '').trim().toLowerCase(); 
-          $('#user-role-disp').text(role.toUpperCase());
-          $('.components').addClass('hidden');
-          
-          if(role === 'siswa') { $('#menu-siswa').removeClass('hidden'); window.loadPage('siswa-home'); } 
-          else if(role === 'guru') { $('#menu-guru').removeClass('hidden'); window.loadPage('admin-home'); } 
-          else if(role === 'admin') { $('#menu-admin').removeClass('hidden'); window.loadPage('admin-home'); } 
-          else { window.Swal.fire('Akses Ditolak', 'Role akun Anda tidak dikenali sistem.', 'error'); }
-      };
+      window.applyMathJax = function() { if (window.MathJax && window.MathJax.typesetPromise) window.MathJax.typesetPromise().catch(()=>{}); }
+
+      window.checkResumeExam = function() {
+          const savedExam = localStorage.getItem('cbt_active_exam');
+          if(savedExam) {
+              try {
+                  const examState = JSON.parse(savedExam);
+                  if(examState && examState.id) {
+                      window.Swal.fire({ title: 'Lanjutkan Ujian?', text: 'Terdeteksi sesi ujian yang belum selesai.', icon: 'info', confirmButtonText: 'Lanjutkan', allowOutsideClick: false }).then(() => {
+                          window.activeExamId = examState.id; window.totalQ = examState.qs.length; window.activeExamViolations = examState.maxV || 3;
+                          $('#do-exam-title').html(`${examState.judul} <span class="mx-2">|</span> ${window.user.Nama}`);
+                          if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch(()=>{}); }
+                          window.runExam(examState.qs, examState.dur, true);
+                      });
+                  }
+              } catch(e) { localStorage.removeItem('cbt_active_exam'); }
+          }
+      }
+
+      window.toggleSidebar = function() { $('#sidebar').toggleClass('active'); $('#sidebar-overlay').toggleClass('active'); }
+      window.toast = function(icon, title) { window.Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 3000}).fire({icon: icon, title: title}); }
 
       window.appRefresh = function() {
           const activeLink = $('.nav-link.active');
@@ -184,8 +321,10 @@ export default function Page() {
                   const match = onclickAttr.match(/'([^']+)'/); 
                   if(match && match[1]) window.loadPage(match[1]); 
               }
-          } else { window.loadPage('admin-home'); }
-      };
+          } else {
+              window.loadPage('admin-home');
+          }
+      }
 
       window.loadPage = function(page) {
           clearInterval(window.timerInt); clearInterval(window.monitorInterval); clearInterval(window.autosaveInterval); window.disableSecurity(); window.stopContinuousBeep();
@@ -227,160 +366,184 @@ export default function Page() {
               if (res.status === 'success') { window.gData = res.data; window.renderContent(page); window.applyMathJax(); } 
               else { window.Swal.fire('Error', res.msg, 'error'); }
           }).withFailureHandler(e => { window.showLoad(false); window.Swal.fire('Error', e.message || 'Gagal memuat dashboard', 'error'); }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas);
-      };
+      }
 
-      // ==========================================
-      // KUMPULAN FUNGSI SISTEM LAINNYA
-      // ==========================================
-      window.playBeep = function(times, continuous = false) {
-          if(audioCtx.state === 'suspended') audioCtx.resume();
-          if (continuous) {
-              finalBeepOsc = audioCtx.createOscillator(); const gainNode = audioCtx.createGain();
-              finalBeepOsc.connect(gainNode); gainNode.connect(audioCtx.destination);
-              finalBeepOsc.type = 'square'; finalBeepOsc.frequency.value = 800;
-              gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime); finalBeepOsc.start(); return;
-          }
-          let count = 0;
-          function beep() {
-              if (count >= times) return;
-              const oscillator = audioCtx.createOscillator(); const gainNode = audioCtx.createGain();
-              oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
-              oscillator.type = 'square'; oscillator.frequency.value = 800;
-              gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
-              oscillator.start(audioCtx.currentTime); oscillator.stop(audioCtx.currentTime + 0.3);
-              count++; setTimeout(beep, 600);
-          }
-          beep();
-      };
+      window.exportToExcel = function(tableId, filename) {
+          const table = document.getElementById(tableId);
+          const wb = window.XLSX.utils.table_to_book(table, {sheet: "Rekap Nilai"});
+          window.XLSX.writeFile(wb, filename + '.xlsx');
+      }
 
-      window.stopContinuousBeep = function() {
-          if (finalBeepOsc) { try { finalBeepOsc.stop(); finalBeepOsc.disconnect(); } catch(e){} finalBeepOsc = null; }
-          if (beepInterval) { clearTimeout(beepInterval); beepInterval = null; }
-      };
+      window.generateUserExcelTemplate = function() {
+          const ws_data = [
+              ["Nama", "Username", "Password", "Role", "Sekolah", "Kelas"],
+              ["Siswa Teladan", "siswa01", "12345", "Siswa", "BELAJAR INOVASI", "10A"],
+              ["Guru Budi", "guru01", "guru123", "Guru", "BELAJAR INOVASI", "10A,10B"]
+          ];
+          const ws = window.XLSX.utils.aoa_to_sheet(ws_data);
+          const wb = window.XLSX.utils.book_new();
+          window.XLSX.utils.book_append_sheet(wb, ws, "TemplateUser");
+          window.XLSX.writeFile(wb, "Template_Upload_User.xlsx");
+      }
 
-      const MathButton = function (context) {
-          const ui = $.summernote.ui;
-          const button = ui.button({
-              contents: '<i class="fas fa-square-root-alt"></i> Rumus', tooltip: 'Tambahkan Rumus Matematika (LaTeX)',
-              click: function () {
-                  window.Swal.fire({
-                      title: 'Editor Rumus (LaTeX)', html: `<div class="text-start small mb-2 text-muted">Ketik format LaTeX manual:</div><textarea id="swal-math-input" class="form-control font-monospace" rows="3"></textarea>`,
-                      showCancelButton: true, confirmButtonText: 'Sisipkan Rumus'
-                  }).then((result) => { if (result.isConfirmed) { const mathText = $('#swal-math-input').val(); if(mathText) context.invoke('editor.insertText', ` $$ ${mathText} $$ `); } });
-              }
-          });
-          return button.render();
-      };
-
-      const snConfig = { height: 180, toolbar: [['style', ['bold', 'italic', 'underline', 'clear']], ['para', ['ul', 'ol']], ['insert', ['picture', 'table', 'link', 'math']]], buttons: { math: MathButton } };
-      window.applyMathJax = function() { if (window.MathJax && window.MathJax.typesetPromise) window.MathJax.typesetPromise().catch(()=>{}); };
-
-      window.checkResumeExam = function() {
-          const savedExam = localStorage.getItem('cbt_active_exam');
-          if(savedExam) {
-              try {
-                  const examState = JSON.parse(savedExam);
-                  if(examState && examState.id) {
-                      window.Swal.fire({ title: 'Lanjutkan Ujian?', text: 'Terdeteksi sesi ujian yang belum selesai.', icon: 'info', confirmButtonText: 'Lanjutkan', allowOutsideClick: false }).then(() => {
-                          window.activeExamId = examState.id; window.totalQ = examState.qs.length; window.activeExamViolations = examState.maxV || 3;
-                          $('#do-exam-title').html(`${examState.judul} <span class="mx-2">|</span> ${window.user.Nama}`);
-                          if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch(()=>{}); }
-                          window.runExam(examState.qs, examState.dur, true);
-                      });
-                  }
-              } catch(e) { localStorage.removeItem('cbt_active_exam'); }
-          }
-      };
-
-      window.toggleSidebar = function() { $('#sidebar').toggleClass('active'); $('#sidebar-overlay').toggleClass('active'); };
-      window.toast = function(icon, title) { window.Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 3000}).fire({icon: icon, title: title}); };
-
-      window.exportToExcel = function(tableId, filename) { const table = document.getElementById(tableId); const wb = window.XLSX.utils.table_to_book(table, {sheet: "Rekap Nilai"}); window.XLSX.writeFile(wb, filename + '.xlsx'); };
-      window.generateUserExcelTemplate = function() { const ws_data = [ ["Nama", "Username", "Password", "Role", "Sekolah", "Kelas"], ["Siswa Teladan", "siswa01", "12345", "Siswa", "BELAJAR INOVASI", "10A"], ["Guru Budi", "guru01", "guru123", "Guru", "BELAJAR INOVASI", "10A,10B"] ]; const ws = window.XLSX.utils.aoa_to_sheet(ws_data); const wb = window.XLSX.utils.book_new(); window.XLSX.utils.book_append_sheet(wb, ws, "TemplateUser"); window.XLSX.writeFile(wb, "Template_Upload_User.xlsx"); };
-      
       window.handleUploadUsersExcel = function(e) {
-          const file = e.target.files[0]; if(!file) return; const reader = new FileReader();
+          const file = e.target.files[0]; if(!file) return;
+          const reader = new FileReader();
           reader.onload = function(evt) {
-              const data = evt.target.result; const workbook = window.XLSX.read(data, {type: 'binary'}); const worksheet = workbook.Sheets[workbook.SheetNames[0]]; const json = window.XLSX.utils.sheet_to_json(worksheet);
-              let formattedData = json.map(row => ({ nama: row['Nama'] || '', username: row['Username'] || '', password: String(row['Password'] || ''), role: row['Role'] || 'Siswa', sekolah: row['Sekolah'] || '-', kelas: String(row['Kelas'] || '-') })).filter(u => u.nama && u.username);
+              const data = evt.target.result; const workbook = window.XLSX.read(data, {type: 'binary'});
+              const worksheet = workbook.Sheets[workbook.SheetNames[0]]; const json = window.XLSX.utils.sheet_to_json(worksheet);
+              let formattedData = json.map(row => ({
+                  nama: row['Nama'] || '', username: row['Username'] || '', password: String(row['Password'] || ''),
+                  role: row['Role'] || 'Siswa', sekolah: row['Sekolah'] || '-', kelas: String(row['Kelas'] || '-')
+              })).filter(u => u.nama && u.username);
               if(formattedData.length === 0) return window.Swal.fire('Error', 'Data kosong atau format salah.', 'error');
               window.showLoad(true);
-              window.google.script.run.withSuccessHandler(res => { window.showLoad(false); if(res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('admin-users'); } else window.Swal.fire('Gagal', res.msg, 'error'); }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBatchSaveUsers(formattedData);
+              window.google.script.run.withSuccessHandler(res => {
+                  window.showLoad(false);
+                  if(res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('admin-users'); } 
+                  else window.Swal.fire('Gagal', res.msg, 'error');
+              }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBatchSaveUsers(formattedData);
           };
           reader.readAsBinaryString(file);
-      };
+      }
 
-      window.toggleAllCb = function(type) { const isChecked = $(`#cb-all-${type}`).is(':checked'); $(`.cb-${type}`).prop('checked', isChecked); window.checkBulkDelete(type); };
-      window.checkBulkDelete = function(type) { const count = $(`.cb-${type}:checked`).length; if(count > 0) $(`#btn-bulk-del-${type}`).removeClass('hidden'); else $(`#btn-bulk-del-${type}`).addClass('hidden'); };
+      window.toggleAllCb = function(type) { const isChecked = $(`#cb-all-${type}`).is(':checked'); $(`.cb-${type}`).prop('checked', isChecked); window.checkBulkDelete(type); }
+      window.checkBulkDelete = function(type) { const count = $(`.cb-${type}:checked`).length; if(count > 0) $(`#btn-bulk-del-${type}`).removeClass('hidden'); else $(`#btn-bulk-del-${type}`).addClass('hidden'); }
 
       window.bulkDeleteUsers = function() {
           const ids = []; $('.cb-user:checked').each(function(){ ids.push($(this).val()); });
           if(ids.length === 0) return;
           window.Swal.fire({title:'Hapus '+ids.length+' User?', text: "Data tidak bisa dikembalikan", icon: 'warning', showCancelButton:true, confirmButtonColor: '#d33'}).then(r=>{
-              if(r.isConfirmed){ window.showLoad(true); window.google.script.run.withSuccessHandler(res=>{ window.showLoad(false); if(res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('admin-users'); } else { window.Swal.fire('Gagal', res.msg, 'error'); } }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBulkDeleteUsers(ids); }
+              if(r.isConfirmed){
+                  window.showLoad(true);
+                  window.google.script.run.withSuccessHandler(res=>{
+                      window.showLoad(false); 
+                      if(res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('admin-users'); }
+                      else { window.Swal.fire('Gagal', res.msg, 'error'); }
+                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBulkDeleteUsers(ids);
+              }
           });
-      };
+      }
 
       window.bulkDeleteRekap = function() {
           const rids = []; $('.cb-rekap:checked').each(function(){ rids.push($(this).val()); });
           if(rids.length === 0) return;
           window.Swal.fire({title:'Hapus '+rids.length+' Hasil Ujian?', text: "Siswa yang dihapus hasilnya akan bisa mengikuti ujian kembali.", icon: 'warning', showCancelButton:true, confirmButtonColor: '#d33'}).then(r=>{
-              if(r.isConfirmed){ window.showLoad(true); window.google.script.run.withSuccessHandler(res=>{ window.showLoad(false); if(res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); } else { window.Swal.fire('Gagal', res.msg, 'error'); } }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBulkDeleteResult(rids); }
+              if(r.isConfirmed){
+                  window.showLoad(true);
+                  window.google.script.run.withSuccessHandler(res=>{
+                      window.showLoad(false); 
+                      if(res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); }
+                      else { window.Swal.fire('Gagal', res.msg, 'error'); }
+                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBulkDeleteResult(rids);
+              }
           });
-      };
+      }
 
       window.renderUsers = function(users) {
           const cleanRole = String(window.user.Role).trim().toLowerCase(); const isAdmin = cleanRole === 'admin';
-          let h = `<div class="d-flex justify-content-between mb-3 flex-wrap gap-2"><div>${isAdmin ? `<button class="btn btn-success shadow-sm me-2" onclick="$('#modalUser').modal('show');$('#modalUser form')[0].reset();$('#mu-id').val('');">+ Tambah User</button> <button class="btn btn-outline-info shadow-sm me-2" onclick="window.generateUserExcelTemplate()"><i class="fas fa-download"></i> Template Excel</button> <label class="btn btn-primary shadow-sm m-0 me-2"><i class="fas fa-upload"></i> Upload Excel <input type="file" hidden accept=".xlsx,.xls" onchange="window.handleUploadUsersExcel(event)"></label> <button id="btn-bulk-del-users" class="btn btn-danger hidden shadow-sm me-2" onclick="window.bulkDeleteUsers()"><i class="fas fa-trash"></i> Hapus Terpilih</button>` : `<h5 class="fw-bold text-primary mb-0"><i class="fas fa-users me-2"></i>Data Siswa Kelas Anda</h5>`}</div><input type="text" id="user-search" class="form-control" style="width:250px" placeholder="Cari Siswa..." onkeyup="window.filterTable('tbl-users', this.value)"></div><div class="card border-0 shadow-sm"><div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0" id="tbl-users"><thead class="table-light"><tr>${isAdmin ? `<th width="5%"><input type="checkbox" id="cb-all-users" class="form-check-input" onchange="window.toggleAllCb('users')"></th>` : ''}<th>Nama</th><th>Username</th><th>Role</th><th>Kelas</th>${isAdmin ? '<th>Aksi</th>' : ''}</tr></thead><tbody>`;
+          let h = `<div class="d-flex justify-content-between mb-3 flex-wrap gap-2">
+              <div>
+                  ${isAdmin ? `<button class="btn btn-success shadow-sm me-2" onclick="$('#modalUser').modal('show');$('#modalUser form')[0].reset();$('#mu-id').val('');">+ Tambah User</button>
+                  <button class="btn btn-outline-info shadow-sm me-2" onclick="window.generateUserExcelTemplate()"><i class="fas fa-download"></i> Template Excel</button>
+                  <label class="btn btn-primary shadow-sm m-0 me-2"><i class="fas fa-upload"></i> Upload Excel <input type="file" hidden accept=".xlsx,.xls" onchange="window.handleUploadUsersExcel(event)"></label>
+                  <button id="btn-bulk-del-users" class="btn btn-danger hidden shadow-sm me-2" onclick="window.bulkDeleteUsers()"><i class="fas fa-trash"></i> Hapus Terpilih</button>` : `<h5 class="fw-bold text-primary mb-0"><i class="fas fa-users me-2"></i>Data Siswa Kelas Anda</h5>`}
+              </div>
+              <input type="text" id="user-search" class="form-control" style="width:250px" placeholder="Cari Siswa..." onkeyup="window.filterTable('tbl-users', this.value)">
+          </div>
+          <div class="card border-0 shadow-sm"><div class="card-body p-0"><div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="tbl-users"><thead class="table-light"><tr>${isAdmin ? `<th width="5%"><input type="checkbox" id="cb-all-users" class="form-check-input" onchange="window.toggleAllCb('users')"></th>` : ''}<th>Nama</th><th>Username</th><th>Role</th><th>Kelas</th>${isAdmin ? '<th>Aksi</th>' : ''}</tr></thead><tbody>`;
+          
           if(users && Array.isArray(users)) {
               users.forEach(u => {
                   const safeData = encodeURIComponent(JSON.stringify(u));
                   h += `<tr>${isAdmin ? `<td><input type="checkbox" class="cb-user form-check-input" value="${u.ID}" onchange="window.checkBulkDelete('users')"></td>` : ''}<td class="fw-bold">${u.Nama}</td><td>${u.Username}</td><td><span class="badge bg-${String(u.Role).trim().toLowerCase()==='admin'?'danger':(String(u.Role).trim().toLowerCase()==='guru'?'warning':'primary')}">${u.Role}</span></td><td>${u.Kelas || '-'}</td>${isAdmin ? `<td><button class="btn btn-sm btn-outline-dark me-1" onclick="window.editUser('${safeData}')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger" onclick="window.delUser('${u.ID}')"><i class="fas fa-trash"></i></button></td>` : ''}</tr>`;
               });
           }
-          h += `</tbody></table></div></div></div>`; $('#content-area').html(h);
-      };
+          h += `</tbody></table></div></div></div>`;
+          $('#content-area').html(h);
+      }
 
       window.renderRecapTable = function() {
-          const uniqueKelas = [...new Set(window.recapAllData.map(item => item.KelasSiswa))].sort(); const uniqueUjian = [...new Set(window.recapAllData.map(item => item.JudulUjian))].sort();
-          let h = `<div class="d-flex justify-content-between align-items-center mb-3"><h5 class="fw-bold mb-0 text-primary"><i class="fas fa-chart-bar me-2"></i>Rekapitulasi Nilai</h5><div><button id="btn-bulk-del-rekap" class="btn btn-danger hidden shadow-sm me-2" onclick="window.bulkDeleteRekap()"><i class="fas fa-trash"></i> Hapus Terpilih</button><button class="btn btn-warning shadow-sm me-2" onclick="$('#modalKatrol').modal('show')"><i class="fas fa-sort-amount-up me-1"></i> Katrol Nilai</button><button class="btn btn-success shadow-sm me-2" onclick="window.exportToExcel('tbl-rekap', 'Rekap_Nilai')"><i class="fas fa-file-excel me-1"></i> Export Excel</button><button class="btn btn-info shadow-sm text-white" onclick="window.printFilteredRecap()"><i class="fas fa-print me-1"></i> Cetak Rekap</button></div></div><div class="row g-2 mb-3"><div class="col-md-4"><select id="filter-ujian" class="form-select" onchange="window.applyFilter()"><option value="">Semua Ujian</option>${uniqueUjian.map(u => `<option value="${u}">${u}</option>`).join('')}</select></div><div class="col-md-4"><select id="filter-kelas" class="form-select" onchange="window.applyFilter()"><option value="">Semua Kelas</option>${uniqueKelas.map(k => `<option value="${k}">${k}</option>`).join('')}</select></div><div class="col-md-4"><input type="text" id="filter-search" class="form-control" placeholder="Cari Nama Siswa..." onkeyup="window.applyFilter()"></div></div><div class="card border-0 shadow-sm"><div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0" id="tbl-rekap"><thead class="table-light"><tr><th width="5%"><input type="checkbox" id="cb-all-rekap" class="form-check-input" onchange="window.toggleAllCb('rekap')"></th><th>Waktu</th><th>Nama Siswa</th><th>Kelas</th><th>Mata Pelajaran</th><th>Nilai Akhir</th><th>Aksi</th></tr></thead><tbody id="tbl-rekap-body"></tbody></table></div></div></div>`;
+          const uniqueKelas = [...new Set(window.recapAllData.map(item => item.KelasSiswa))].sort();
+          const uniqueUjian = [...new Set(window.recapAllData.map(item => item.JudulUjian))].sort();
+          let h = `
+          <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="fw-bold mb-0 text-primary"><i class="fas fa-chart-bar me-2"></i>Rekapitulasi Nilai</h5>
+              <div>
+                  <button id="btn-bulk-del-rekap" class="btn btn-danger hidden shadow-sm me-2" onclick="window.bulkDeleteRekap()"><i class="fas fa-trash"></i> Hapus Terpilih</button>
+                  <button class="btn btn-warning shadow-sm me-2" onclick="$('#modalKatrol').modal('show')"><i class="fas fa-sort-amount-up me-1"></i> Katrol Nilai</button>
+                  <button class="btn btn-success shadow-sm me-2" onclick="window.exportToExcel('tbl-rekap', 'Rekap_Nilai')"><i class="fas fa-file-excel me-1"></i> Export Excel</button>
+                  <button class="btn btn-info shadow-sm text-white" onclick="window.printFilteredRecap()"><i class="fas fa-print me-1"></i> Cetak Rekap</button>
+              </div>
+          </div>
+          <div class="row g-2 mb-3">
+              <div class="col-md-4"><select id="filter-ujian" class="form-select" onchange="window.applyFilter()"><option value="">Semua Ujian</option>${uniqueUjian.map(u => `<option value="${u}">${u}</option>`).join('')}</select></div>
+              <div class="col-md-4"><select id="filter-kelas" class="form-select" onchange="window.applyFilter()"><option value="">Semua Kelas</option>${uniqueKelas.map(k => `<option value="${k}">${k}</option>`).join('')}</select></div>
+              <div class="col-md-4"><input type="text" id="filter-search" class="form-control" placeholder="Cari Nama Siswa..." onkeyup="window.applyFilter()"></div>
+          </div>
+          <div class="card border-0 shadow-sm"><div class="card-body p-0"><div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="tbl-rekap"><thead class="table-light"><tr><th width="5%"><input type="checkbox" id="cb-all-rekap" class="form-check-input" onchange="window.toggleAllCb('rekap')"></th><th>Waktu</th><th>Nama Siswa</th><th>Kelas</th><th>Mata Pelajaran</th><th>Nilai Akhir</th><th>Aksi</th></tr></thead><tbody id="tbl-rekap-body"></tbody></table></div></div></div>`;
           $('#content-area').html(h); window.applyFilter();
-      };
+      }
 
       window.applyFilter = function() {
         const fUjian = $('#filter-ujian').val(); const fKelas = $('#filter-kelas').val(); const fSearch = $('#filter-search').val().toLowerCase();
         const tbody = $('#tbl-rekap-body'); tbody.empty(); window.recapDataStore = {};
         const filtered = window.recapAllData.filter(item => { if(fUjian && item.JudulUjian !== fUjian) return false; if(fKelas && item.KelasSiswa !== fKelas) return false; if(fSearch && !item.NamaSiswa.toLowerCase().includes(fSearch)) return false; return true; });
-        window.currentFilteredData = filtered; $('#cb-all-rekap').prop('checked', false); $('#btn-bulk-del-rekap').addClass('hidden');
+        window.currentFilteredData = filtered;
+        $('#cb-all-rekap').prop('checked', false); $('#btn-bulk-del-rekap').addClass('hidden');
+
         if(filtered.length === 0) { tbody.html('<tr><td colspan="7" class="text-center p-3">Tidak ada data ditemukan.</td></tr>'); return; }
-        filtered.forEach(r => { window.recapDataStore[r.ResultID] = { detail: r.Detail, nama: r.NamaSiswa, ujian: r.JudulUjian, nilai: r.TotalNilai, pembuat: r.PembuatNama }; tbody.append(`<tr><td><input type="checkbox" class="cb-rekap form-check-input" value="${r.ResultID}" onchange="window.checkBulkDelete('rekap')"></td><td class="small text-muted">${r.WaktuSubmit}</td><td><div class="fw-bold">${r.NamaSiswa}</div></td><td>${r.KelasSiswa}</td><td>${r.Mapel} <br><small class="text-muted">${r.JudulUjian}</small></td><td><span class="badge bg-primary fs-6">${r.TotalNilai}</span></td><td><button class="btn btn-sm btn-outline-info me-1" onclick="window.openKoreksi('${r.ResultID}')" title="Koreksi & Input Nilai Personal"><i class="fas fa-edit"></i> Edit Nilai</button><button class="btn btn-sm btn-outline-success me-1" onclick="window.printRecap('${r.ResultID}')" title="Cetak"><i class="fas fa-print"></i></button><button class="btn btn-sm btn-outline-danger" onclick="window.deleteResult('${r.ResultID}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`); });
-      };
+        filtered.forEach(r => {
+          window.recapDataStore[r.ResultID] = { detail: r.Detail, nama: r.NamaSiswa, ujian: r.JudulUjian, nilai: r.TotalNilai, pembuat: r.PembuatNama };
+          tbody.append(`<tr><td><input type="checkbox" class="cb-rekap form-check-input" value="${r.ResultID}" onchange="window.checkBulkDelete('rekap')"></td><td class="small text-muted">${r.WaktuSubmit}</td><td><div class="fw-bold">${r.NamaSiswa}</div></td><td>${r.KelasSiswa}</td><td>${r.Mapel} <br><small class="text-muted">${r.JudulUjian}</small></td><td><span class="badge bg-primary fs-6">${r.TotalNilai}</span></td><td><button class="btn btn-sm btn-outline-info me-1" onclick="window.openKoreksi('${r.ResultID}')" title="Koreksi & Input Nilai Personal"><i class="fas fa-edit"></i> Edit Nilai</button><button class="btn btn-sm btn-outline-success me-1" onclick="window.printRecap('${r.ResultID}')" title="Cetak"><i class="fas fa-print"></i></button><button class="btn btn-sm btn-outline-danger" onclick="window.deleteResult('${r.ResultID}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`);
+        });
+      }
 
       window.applyKatrolMassal = function() {
           const addVal = parseFloat($('#katrol-value').val()) || 0;
           if(addVal === 0) return window.Swal.fire('Perhatian', 'Masukkan nilai katrol yang valid.', 'warning');
           if(!window.currentFilteredData || window.currentFilteredData.length === 0) return window.Swal.fire('Data Kosong', 'Tidak ada data di tabel untuk dikatrol.', 'info');
-          window.Swal.fire({ title: 'Konfirmasi Katrol Nilai', text: `Anda yakin menambahkan nilai sebesar ${addVal} ke ${window.currentFilteredData.length} siswa di tabel ini?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Eksekusi', }).then((result) => {
-              if(result.isConfirmed) { window.showLoad(true); const rids = window.currentFilteredData.map(d => d.ResultID); window.google.script.run.withSuccessHandler(res => { window.showLoad(false); $('#modalKatrol').modal('hide'); if (res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); } else { window.Swal.fire('Gagal', res.msg, 'error'); } }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminKatrolMassal(rids, addVal); }
+          
+          window.Swal.fire({
+              title: 'Konfirmasi Katrol Nilai', text: `Anda yakin menambahkan nilai sebesar ${addVal} ke ${window.currentFilteredData.length} siswa di tabel ini?`,
+              icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Eksekusi',
+          }).then((result) => {
+              if(result.isConfirmed) {
+                  window.showLoad(true); const rids = window.currentFilteredData.map(d => d.ResultID);
+                  window.google.script.run.withSuccessHandler(res => {
+                      window.showLoad(false); $('#modalKatrol').modal('hide');
+                      if (res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); } 
+                      else { window.Swal.fire('Gagal', res.msg, 'error'); }
+                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminKatrolMassal(rids, addVal);
+              }
           });
-      };
+      }
 
       window.renderAdministrasi = function() {
           const uniqueKelas = [...new Set((window.gAdminData.users || []).map(u => String(u.Kelas).trim()))].filter(k => k).sort();
           let optKelas = `<option value="ALL">Semua Kelas</option>` + uniqueKelas.map(k => `<option value="${k}">${k}</option>`).join('');
           let optUjian = `<option value="">-- Pilih Ujian --</option>` + (window.gAdminData.exams || []).map(e => `<option value="${e.ExamID}">${e.Judul} (${e.Mapel})</option>`).join('');
-          let h = `<div class="row g-4"><div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h5 class="fw-bold text-primary"><i class="fas fa-id-card me-2"></i>Cetak Kartu Login</h5><p class="small text-muted">Cetak kartu akun siswa untuk login aplikasi CBT.</p><label class="small fw-bold">Filter Kelas</label><select id="adm-kls-kartu" class="form-select mb-3">${optKelas}</select><button class="btn btn-primary w-100" onclick="window.printKartuLogin()"><i class="fas fa-print me-1"></i> Cetak Kartu</button></div></div></div><div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h5 class="fw-bold text-info"><i class="fas fa-clipboard-list me-2"></i>Cetak Daftar Hadir</h5><p class="small text-muted">Format absensi siswa saat pelaksanaan ujian.</p><label class="small fw-bold">Pilih Ujian</label><select id="adm-exam-hadir" class="form-select mb-2">${optUjian}</select><label class="small fw-bold">Filter Kelas</label><select id="adm-kls-hadir" class="form-select mb-3">${optKelas}</select><button class="btn btn-info text-white w-100" onclick="window.printDaftarHadir()"><i class="fas fa-print me-1"></i> Cetak Daftar Hadir</button></div></div></div><div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h5 class="fw-bold text-success"><i class="fas fa-file-signature me-2"></i>Cetak Berita Acara</h5><p class="small text-muted">Format laporan pelaksanaan ujian untuk pengawas.</p><label class="small fw-bold">Pilih Ujian</label><select id="adm-exam-ba" class="form-select mb-2">${optUjian}</select><label class="small fw-bold">Filter Kelas</label><select id="adm-kls-ba" class="form-select mb-3">${optKelas}</select><button class="btn btn-success w-100" onclick="window.printBeritaAcara()"><i class="fas fa-print me-1"></i> Cetak Berita Acara</button></div></div></div></div>`;
+          
+          let h = `
+          <div class="row g-4">
+              <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h5 class="fw-bold text-primary"><i class="fas fa-id-card me-2"></i>Cetak Kartu Login</h5><p class="small text-muted">Cetak kartu akun siswa untuk login aplikasi CBT.</p><label class="small fw-bold">Filter Kelas</label><select id="adm-kls-kartu" class="form-select mb-3">${optKelas}</select><button class="btn btn-primary w-100" onclick="window.printKartuLogin()"><i class="fas fa-print me-1"></i> Cetak Kartu</button></div></div></div>
+              <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h5 class="fw-bold text-info"><i class="fas fa-clipboard-list me-2"></i>Cetak Daftar Hadir</h5><p class="small text-muted">Format absensi siswa saat pelaksanaan ujian.</p><label class="small fw-bold">Pilih Ujian</label><select id="adm-exam-hadir" class="form-select mb-2">${optUjian}</select><label class="small fw-bold">Filter Kelas</label><select id="adm-kls-hadir" class="form-select mb-3">${optKelas}</select><button class="btn btn-info text-white w-100" onclick="window.printDaftarHadir()"><i class="fas fa-print me-1"></i> Cetak Daftar Hadir</button></div></div></div>
+              <div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h5 class="fw-bold text-success"><i class="fas fa-file-signature me-2"></i>Cetak Berita Acara</h5><p class="small text-muted">Format laporan pelaksanaan ujian untuk pengawas.</p><label class="small fw-bold">Pilih Ujian</label><select id="adm-exam-ba" class="form-select mb-2">${optUjian}</select><label class="small fw-bold">Filter Kelas</label><select id="adm-kls-ba" class="form-select mb-3">${optKelas}</select><button class="btn btn-success w-100" onclick="window.printBeritaAcara()"><i class="fas fa-print me-1"></i> Cetak Berita Acara</button></div></div></div>
+          </div>`;
           $('#content-area').html(h);
-      };
+      }
 
       window.printKartuLogin = function() {
           const kls = $('#adm-kls-kartu').val(); let usersToPrint = window.gAdminData.users || [];
           if (kls !== 'ALL') usersToPrint = usersToPrint.filter(u => u.Kelas === kls);
           if (usersToPrint.length === 0) return window.Swal.fire('Kosong', 'Tidak ada data siswa untuk kelas tersebut.', 'info');
           let html = `<html><head><title>Cetak Kartu Login</title><style>body { font-family: 'Times New Roman', Times, serif; } .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 15px; } .card { border: 2px dashed #333; padding: 15px; border-radius: 8px; page-break-inside: avoid; } .kop { display: flex; align-items: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px; } .kop img { width: 50px; height: 50px; margin-right: 15px; } .kop h3 { margin: 0; font-size: 15px; text-transform: uppercase; } .kop p { margin: 0; font-size: 11px; } table { width: 100%; font-size: 14px; } td { padding: 4px 0; } @media print { .no-print { display: none; } }</style></head><body><div class="no-print" style="margin: 15px; text-align:right;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; background:#7e22ce; color:white; border:none; border-radius:5px; cursor:pointer;">Cetak Dokumen</button></div><div class="grid">`;
-          usersToPrint.forEach(u => { html += `<div class="card"><div class="kop"><img src="${LOGO_BARU}" alt="Logo"><div><h3>KARTU LOGIN UJIAN CBT</h3><p>BELAJAR INOVASI</p></div></div><table><tr><td width="30%"><strong>Nama</strong></td><td width="5%">:</td><td>${u.Nama}</td></tr><tr><td><strong>Kelas</strong></td><td>:</td><td>${u.Kelas}</td></tr><tr><td><strong>Username</strong></td><td>:</td><td><strong>${u.Username}</strong></td></tr><tr><td><strong>Password</strong></td><td>:</td><td><strong>${u.Password}</strong></td></tr></table></div>`; }); html += `</div><script>window.onload = function() { window.print(); }<\/script></body></html>`;
+          usersToPrint.forEach(u => { html += `<div class="card"><div class="kop"><img src="${LOGO_BARU}" alt="Logo"><div><h3>KARTU LOGIN UJIAN CBT</h3><p>BELAJAR INOVASI</p></div></div><table><tr><td width="30%"><strong>Nama</strong></td><td width="5%">:</td><td>${u.Nama}</td></tr><tr><td><strong>Kelas</strong></td><td>:</td><td>${u.Kelas}</td></tr><tr><td><strong>Username</strong></td><td>:</td><td><strong>${u.Username}</strong></td></tr><tr><td><strong>Password</strong></td><td>:</td><td><strong>${u.Password}</strong></td></tr></table></div>`; });
+          html += `</div><script>window.onload = function() { window.print(); }<\/script></body></html>`;
           const win = window.open('', '', 'width=800,height=600'); win.document.write(html); win.document.close();
-      };
+      }
 
       window.printDaftarHadir = function() {
           const examId = $('#adm-exam-hadir').val(); const kls = $('#adm-kls-hadir').val();
@@ -392,7 +555,7 @@ export default function Page() {
           usersToPrint.forEach((u, i) => { let ttdCol1 = (i % 2 === 0) ? `${i+1}.` : ''; let ttdCol2 = (i % 2 !== 0) ? `${i+1}.` : ''; html += `<tr><td style="text-align:center">${i + 1}</td><td style="text-align:center">${u.Username}</td><td>${u.Nama}</td><td class="ttd-box">${ttdCol1}</td><td class="ttd-box">${ttdCol2}</td><td></td></tr>`; });
           html += `</tbody></table><div style="margin-top: 50px; text-align: right; padding-right: 50px;"><p>..................................</p><p style="margin-bottom: 70px;">Pengawas Ujian,</p><p><strong>( ......................................... )</strong></p></div><script>window.onload = function() { window.print(); }<\/script></body></html>`;
           const win = window.open('', '', 'width=800,height=600'); win.document.write(html); win.document.close();
-      };
+      }
 
       window.printBeritaAcara = function() {
           const examId = $('#adm-exam-ba').val(); const kls = $('#adm-kls-ba').val();
@@ -400,7 +563,7 @@ export default function Page() {
           const exam = (window.gAdminData.exams || []).find(e => String(e.ExamID) === String(examId));
           let html = `<html><head><title>Berita Acara Ujian</title><style>body { font-family: 'Times New Roman', Times, serif; padding: 40px; line-height: 1.6; } .kop { display: flex; align-items: center; justify-content: center; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 30px; text-align: center; } .kop img { width: 80px; height: 80px; margin-right: 20px; position: absolute; left: 40px; } .kop h2 { margin: 0; font-size: 22px; text-transform: uppercase; } .kop p { margin: 5px 0 0; font-size: 14px; } h3 { text-align: center; text-decoration: underline; margin-bottom: 30px; } .content { font-size: 15px; text-align: justify; } .content p { margin-bottom: 15px; } .ttd-section { margin-top: 60px; width: 100%; } .ttd-section table { width: 100%; text-align: center; } @media print { .no-print { display: none; } }</style></head><body><div class="no-print" style="margin-bottom: 15px; text-align:right;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; background:#198754; color:white; border:none; border-radius:5px; cursor:pointer;">Cetak Dokumen</button></div><div class="kop"><img src="${LOGO_BARU}" alt="Logo"><div><h2>PANITIA PELAKSANAAN UJIAN CBT</h2><p>Aplikasi BELAJAR INOVASI</p></div></div><h3>BERITA ACARA PELAKSANAAN UJIAN</h3><div class="content"><p>Pada hari ini .................................. tanggal ........... bulan .............................. tahun .........................., telah diselenggarakan Ujian Berbasis Komputer (CBT) dengan rincian sebagai berikut:</p><table style="width: 100%; margin-left: 20px; margin-bottom: 15px;"><tr><td width="25%">Mata Pelajaran</td><td width="5%">:</td><td><strong>${exam.Mapel} - ${exam.Judul}</strong></td></tr><tr><td>Kelas / Ruang</td><td>:</td><td><strong>${kls === 'ALL' ? 'Semua Kelas' : kls}</strong></td></tr><tr><td>Waktu Pelaksanaan</td><td>:</td><td>Pukul ..................... s.d .....................</td></tr></table><p>Dengan jumlah peserta ujian sebagai berikut:</p><table style="width: 100%; margin-left: 20px; margin-bottom: 20px;"><tr><td width="25%">1. Jumlah Peserta Seharusnya</td><td width="5%">:</td><td>........... Orang</td></tr><tr><td>2. Jumlah Peserta Hadir</td><td>:</td><td>........... Orang</td></tr><tr><td>3. Jumlah Peserta Tidak Hadir</td><td>:</td><td>........... Orang</td></tr><tr><td valign="top">4. Catatan Selama Ujian</td><td valign="top">:</td><td style="border-bottom: 1px dotted #000; height: 30px;"></td></tr><tr><td></td><td></td><td style="border-bottom: 1px dotted #000; height: 30px;"></td></tr></table><p>Demikian Berita Acara ini dibuat dengan sesungguhnya untuk dapat dipergunakan sebagaimana mestinya.</p></div><div class="ttd-section"><table><tr><td width="50%"></td><td width="50%">....................................<br>Pengawas Ujian,</td></tr><tr><td height="80"></td><td></td></tr><tr><td></td><td><strong>( .................................................. )</strong></td></tr></table></div><script>window.onload = function() { window.print(); }<\/script></body></html>`;
           const win = window.open('', '', 'width=800,height=600'); win.document.write(html); win.document.close();
-      };
+      }
 
       window.printFilteredRecap = function() {
         if(!window.currentFilteredData || window.currentFilteredData.length === 0) { window.Swal.fire('Data Kosong', 'Tidak ada data nilai yang tampil untuk dicetak.', 'info'); return; }
@@ -410,7 +573,7 @@ export default function Page() {
         window.currentFilteredData.forEach((r, i) => { html += `<tr><td class="text-center">${i + 1}</td><td class="text-center">${r.WaktuSubmit}</td><td>${r.NamaSiswa}</td><td class="text-center">${r.KelasSiswa}</td><td>${r.Mapel} - ${r.JudulUjian}</td><td class="text-center" style="font-weight: bold;">${r.TotalNilai}</td></tr>`; });
         html += `</tbody></table><div class="signature"><div><p>${new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p><p style="margin-bottom: 70px;">Guru Pengampu / Pengawas</p><p><strong>${namaPengawas}</strong></p></div></div><script>window.onload = function() { window.print();}<\/script></body></html>`;
         const printWin = window.open('', '', 'width=900,height=700'); printWin.document.write(html); printWin.document.close();
-      };
+      }
 
       window.printRecap = function(rid) {
         const d = window.recapDataStore[rid]; if(!d) return;
@@ -422,7 +585,7 @@ export default function Page() {
         const printWindow = window.open('', '', 'width=800,height=600');
         printWindow.document.write(`<html><head><title>Cetak Hasil - ${d.nama}</title><style>body{ font-family: 'Times New Roman', Times, serif; padding: 40px; color: #333; } .header { text-align: center; border-bottom: 3px solid #000; padding-bottom: 10px; margin-bottom: 20px; } .score-box { border: 2px solid #000; padding: 15px; text-align: center; margin-bottom: 20px; width: 200px; float: right; } .score { font-size: 38px; font-weight: bold; margin-top: 5px; } .data-table { width: 100%; border-collapse: collapse; margin-top: 15px; } .data-table th, .data-table td { border: 1px solid #000; padding: 8px; } .data-table th { background: #f0f0f0; text-align: center; } .clearfix::after { content: ""; clear: both; display: table; } .footer { margin-top: 50px; text-align: right; } .footer div { display: inline-block; text-align: center; width: 250px; } @media print { .no-print { display: none; } }</style></head><body><div class="no-print" style="text-align: right; margin-bottom: 20px;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; cursor:pointer; background:#7e22ce; color:white; border:none; border-radius:5px;">Cetak Dokumen</button></div><div class="header"><h2>HASIL UJIAN BERBASIS KOMPUTER</h2><h4>AGIS CBT SYSTEM</h4></div><div class="clearfix"><div class="score-box"><h3>NILAI AKHIR</h3><div class="score">${d.nilai}</div></div><table class="student-info"><tr><td width="150"><strong>Nama Peserta</strong></td><td width="10">:</td><td>${d.nama}</td></tr><tr><td><strong>Mata Pelajaran</strong></td><td>:</td><td>${d.ujian}</td></tr><tr><td><strong>Waktu Cetak</strong></td><td>:</td><td>${new Date().toLocaleString('id-ID')}</td></tr></table></div><h4 style="margin-top:20px; border-bottom:1px solid #ccc; padding-bottom:5px;">Rincian Jawaban & Skor Tiap Soal</h4>${detailHtml}<div class="footer"><div><p>${new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p><p style="margin-bottom: 70px;">Guru Pengampu / Pengawas</p><p><strong>${namaPengawas}</strong></p></div></div><script>window.onload = function() { window.print(); }<\/script></body></html>`);
         printWindow.document.close();
-      };
+      }
 
       window.openKoreksi = function(rid) {
           const d = window.recapDataStore[rid]; if (!d) return;
@@ -437,7 +600,7 @@ export default function Page() {
               html += `<div class="p-2 bg-light rounded border small mt-2"><b>Jawaban Siswa:</b><br>${displayAns ? String(displayAns).replace(/\n/g, '<br>') : '<i class="text-muted">Tidak dijawab</i>'}</div></div></div>`;
           });
           $('#kor-body').html(html); $('#modalKoreksi').modal('show');
-      };
+      }
 
       window.saveKoreksi = function() {
           const rid = $('#kor-rid').val(); const d = window.recapDataStore[rid]; let detailArr = JSON.parse(d.detail);
@@ -452,7 +615,7 @@ export default function Page() {
               if (res.status === 'success') { $('#modalKoreksi').modal('hide'); window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); } 
               else { window.Swal.fire('Gagal', res.msg, 'error'); }
           }).withFailureHandler(err => { btn.prop('disabled', false).text('Simpan Perubahan'); window.Swal.fire('Error', err.message, 'error'); }).adminUpdateResult(rid, finalScore, JSON.stringify(detailArr));
-      };
+      }
 
       window.renderContent = function(page) {
           try {
@@ -508,7 +671,7 @@ export default function Page() {
               console.error("Render Content Error: ", err);
               $('#content-area').html(`<div class="alert alert-danger">Sistem sedang memproses data... Harap muat ulang halaman.</div>`);
           }
-      };
+      }
 
       window.filterAdminUjian = function() {
           const m = $('#filter-mapel-ujian').val(); const k = $('#filter-kelas-ujian').val();
@@ -517,7 +680,7 @@ export default function Page() {
               const matchKelas = k === '' || $(this).data('kelas') === k;
               $(this).toggle(matchMapel && matchKelas);
           });
-      };
+      }
 
       window.openExamModal = function(str) {
         $('#modalExam').modal('show');
@@ -552,7 +715,7 @@ export default function Page() {
           let valKelas = d ? d.TargetKelas : '';
           container.html(`<input type="text" name="targetKelas" id="ex-kelas" class="form-control" placeholder="Contoh: 7A, 7B" value="${valKelas}" required>`);
         }
-      };
+      }
 
       window.saveExam = function() {
         const formEl = document.getElementById('frm-exam'); 
@@ -595,11 +758,11 @@ export default function Page() {
             window.Swal.fire('Gagal', res.msg, 'error'); 
           }
         }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminSaveExam(d);
-      };
+      }
 
-      window.delExam = function(id){ window.Swal.fire({title:'Hapus Jadwal?', icon:'warning', showCancelButton:true}).then(r=>{if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.showLoad(false); window.loadPage('admin-ujian')}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error')}).adminDeleteExam(id, window.user.ID, window.user.Role); } }) };
+      window.delExam = function(id){ window.Swal.fire({title:'Hapus Jadwal?', icon:'warning', showCancelButton:true}).then(r=>{if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.showLoad(false); window.loadPage('admin-ujian')}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error')}).adminDeleteExam(id, window.user.ID, window.user.Role); } }) }
 
-      window.manageQ = function(id) { window.activeExamId = id; $('#modalQ').modal('show'); window.loadQList(); };
+      window.manageQ = function(id) { window.activeExamId = id; $('#modalQ').modal('show'); window.loadQList(); }
 
       window.generateQuestionExcelTemplate = function() {
           const ws_data = [
@@ -610,7 +773,7 @@ export default function Page() {
           const wb = window.XLSX.utils.book_new();
           window.XLSX.utils.book_append_sheet(wb, ws, "TemplateSoal");
           window.XLSX.writeFile(wb, "Template_Upload_Soal.xlsx");
-      };
+      }
 
       window.handleUploadQuestionsExcel = function(e) {
           const file = e.target.files[0]; if(!file) return; const reader = new FileReader();
@@ -629,7 +792,7 @@ export default function Page() {
               }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBatchSaveQuestions(window.activeExamId, formattedData, window.user.ID);
           };
           reader.readAsBinaryString(file);
-      };
+      }
 
       window.loadQList = function() {
           $('#q-list-container').html('<div class="text-center p-5"><div class="spinner"></div></div>');
@@ -650,13 +813,13 @@ export default function Page() {
           }).withFailureHandler(err => {
               window.Swal.fire('Error', err.message, 'error');
           }).getExamQuestions(window.activeExamId);
-      };
+      }
 
       window.addNewQuestionBlock = function() {
           window.lastQuestionNum++; const newBlock = window.renderQuestionBlock({ Nomor: window.lastQuestionNum }, window.lastQuestionNum - 1);
           $('#q-list-container').append(newBlock); const uid = $(newBlock).attr('data-id');
           window.toggleEditQ(uid); $('.modal-body').animate({ scrollTop: $('.modal-body')[0].scrollHeight }, 500);
-      };
+      }
 
       window.generateQHTML = function(q) {
           let inp = '';
@@ -675,7 +838,7 @@ export default function Page() {
               inp = `<textarea style="width:100%; padding:15px; border:1px solid #e2e8f0; border-radius:6px; font-family:inherit; resize:vertical;" rows="5" placeholder="Ketik jawaban Anda di sini..."></textarea>`;
           }
           return `<div style="font-family: 'Poppins', Arial, sans-serif; padding:25px; background:#f8fafc; border-radius:12px; color:#1e293b; border:1px solid #e2e8f0; margin-bottom:20px;"><div style="background:var(--primary); color:white; display:inline-block; padding:5px 15px; border-radius:15px; font-size:12px; font-weight:bold; margin-bottom:20px; box-shadow:0 2px 4px rgba(126,34,206,0.2);">Soal No. ${q.Nomor||''}</div><div style="margin-bottom:20px; font-size:16px; line-height:1.6; word-wrap: break-word;">${q.Pertanyaan}</div>${inp}</div>`;
-      };
+      }
 
       window.previewAllQ = function() {
           const htmlContent = window.generateAllQHTML();
@@ -684,7 +847,7 @@ export default function Page() {
               $('body').append(`<div class="modal fade" id="modalPreviewQ" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content"><div class="modal-header bg-info text-white"><h5 class="modal-title fw-bold"><i class="fas fa-desktop me-2"></i> Preview Seluruh Soal</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body bg-light" id="preview-q-body"></div></div></div></div>`);
           }
           $('#preview-q-body').html(htmlContent); $('#modalPreviewQ').modal('show'); window.applyMathJax();
-      };
+      }
 
       window.downloadAllQ = function() {
           const htmlContent = window.generateAllQHTML();
@@ -692,14 +855,14 @@ export default function Page() {
           const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Preview Soal Ujian</title><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet"><script src="https://polyfill.io/v3/polyfill.min.js?features=es6"><\/script><script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"><\/script><style>body { font-family: 'Poppins', Arial, sans-serif; background-color: #f1f5f9; padding: 40px; margin: 0; display:flex; justify-content:center; } .container { max-width: 800px; width: 100%; } img { max-width: 100%; height: auto; border-radius: 6px; margin: 5px 0; }</style></head><body><div class="container">${htmlContent}</div><script>window.onload = function() { setTimeout(window.print, 1000); }<\/script></body></html>`;
           const blob = new Blob([html], {type: "text/html;charset=utf-8"}); const url = URL.createObjectURL(blob);
           const a = document.createElement("a"); a.href = url; a.download = `Soal_Ujian_Lengkap.html`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-      };
+      }
 
       window.renderQuestionBlock = function(q, idx) {
           const uid = q.QID ? q.QID : 'NEW_' + Math.random().toString(36).substr(2, 9);
           const nomor = q.Nomor || (idx + 1); const cleanPrev = (q.Pertanyaan || 'Soal Baru').replace(/<[^>]+>/g, '').substring(0, 80) + '...';
           const safeJson = encodeURIComponent(JSON.stringify(q)); 
           return `<div class="card mb-4 border-0 shadow-sm q-block" id="block-${uid}" data-id="${uid}" data-q-obj="${safeJson}"><div class="card-header bg-white d-flex justify-content-between align-items-center py-3"><span class="badge bg-primary rounded-pill px-3">No. ${nomor}</span><div><button class="btn btn-sm btn-outline-secondary me-2" onclick="window.toggleEditQ('${uid}')"><i class="fas fa-edit"></i> Edit</button><button class="btn btn-sm btn-outline-danger" onclick="window.deleteQBlock('${uid}')"><i class="fas fa-trash"></i></button></div></div><div class="card-body"><div class="q-preview mb-2 fw-bold text-muted">${cleanPrev}</div><div class="q-form hidden" id="form-${uid}"><form id="frm-q-${uid}" onsubmit="return false;"><input type="hidden" name="id" value="${q.QID || ''}"><div class="row g-2 mb-3"><div class="col-md-2"><label class="small fw-bold">No</label><input type="number" name="num" class="form-control" value="${nomor}"></div><div class="col-md-4"><label class="small fw-bold">Tipe</label><select name="type" class="form-select q-type-sel" onchange="window.renderAnsFields('${uid}', this.value)" id="type-${uid}"><option value="PGS" ${q.Tipe=='PGS'?'selected':''}>Pilihan Ganda</option><option value="PGK" ${q.Tipe=='PGK'?'selected':''}>PG Kompleks</option><option value="PGKK" ${q.Tipe=='PGKK'?'selected':''}>Benar Salah</option><option value="Menjodohkan" ${q.Tipe=='Menjodohkan'?'selected':''}>Menjodohkan</option><option value="Uraian" ${q.Tipe=='Uraian'?'selected':''}>Uraian</option></select></div><div class="col-md-2"><label class="small fw-bold">Skor</label><input type="number" step="0.1" name="score" class="form-control" value="${q.Skor || 10}"></div></div><label class="small fw-bold mb-1">Pertanyaan</label><textarea id="sn-${uid}" name="text">${q.Pertanyaan || ''}</textarea><div class="card mt-3 bg-light"><div class="card-body"><label class="small fw-bold mb-2">Jawaban & Kunci</label><div id="ans-area-${uid}"></div></div></div><div class="text-end mt-3"><button type="button" class="btn btn-secondary me-1" onclick="window.toggleEditQ('${uid}')">Tutup</button><button type="button" class="btn btn-success" onclick="window.saveQBlock('${uid}')"><i class="fas fa-save"></i> Simpan</button></div></form></div></div></div>`;
-      };
+      }
 
       window.toggleEditQ = function(uid) { 
           const form = $(`#form-${uid}`); 
@@ -710,7 +873,7 @@ export default function Page() {
               form.addClass('hidden'); $(`#block-${uid}`).removeClass('border-primary'); 
               $(`#sn-${uid}`).summernote('destroy'); $(`#ans-area-${uid} .summernote-opt`).each(function(){ $(this).summernote('destroy'); }); 
           } 
-      };
+      }
 
       window.renderAnsFields = function(uid, type) { 
           const block = $(`#block-${uid}`); let qData = {}; 
@@ -734,16 +897,16 @@ export default function Page() {
               h = `<textarea class="form-control" name="essay_key" placeholder="Kata kunci penilaian (dipisah koma)">${keys.join(',')}</textarea>`; 
           } 
           $(`#ans-area-${uid}`).html(h); $(`#ans-area-${uid} .summernote-opt`).summernote(snConfig); 
-      };
+      }
 
-      window.genOptRow = function(uid, type, val='', checked='') { return `<div class="d-flex align-items-start mb-2 ans-row gap-2"><div class="mt-2"><input type="${type}" name="k_${uid}" class="form-check-input" ${checked}></div><div class="flex-grow-1"><textarea class="summernote-opt">${val}</textarea></div><button type="button" class="btn btn-outline-danger mt-1" onclick="window.removeOptRow(this)">X</button></div>`; };
-      window.genPGKKRow = function(q='', k='B') { return `<tr><td><textarea class="summernote-opt pgkk-q">${q}</textarea></td><td><select class="form-select pgkk-k"><option value="B" ${k=='B'?'selected':''}>Benar</option><option value="S" ${k=='S'?'selected':''}>Salah</option></select></td><td><button type="button" class="btn btn-danger btn-sm" onclick="$(this).closest('tr').remove()">X</button></td></tr>`; };
-      window.genMatchRow = function(l='', r='') { return `<tr><td><textarea class="summernote-opt match-l">${l}</textarea></td><td><textarea class="summernote-opt match-r">${r}</textarea></td><td><button type="button" class="btn btn-danger btn-sm" onclick="$(this).closest('tr').remove()">X</button></td></tr>`; };
+      window.genOptRow = function(uid, type, val='', checked='') { return `<div class="d-flex align-items-start mb-2 ans-row gap-2"><div class="mt-2"><input type="${type}" name="k_${uid}" class="form-check-input" ${checked}></div><div class="flex-grow-1"><textarea class="summernote-opt">${val}</textarea></div><button type="button" class="btn btn-outline-danger mt-1" onclick="window.removeOptRow(this)">X</button></div>`; }
+      window.genPGKKRow = function(q='', k='B') { return `<tr><td><textarea class="summernote-opt pgkk-q">${q}</textarea></td><td><select class="form-select pgkk-k"><option value="B" ${k=='B'?'selected':''}>Benar</option><option value="S" ${k=='S'?'selected':''}>Salah</option></select></td><td><button type="button" class="btn btn-danger btn-sm" onclick="$(this).closest('tr').remove()">X</button></td></tr>`; }
+      window.genMatchRow = function(l='', r='') { return `<tr><td><textarea class="summernote-opt match-l">${l}</textarea></td><td><textarea class="summernote-opt match-r">${r}</textarea></td><td><button type="button" class="btn btn-danger btn-sm" onclick="$(this).closest('tr').remove()">X</button></td></tr>`; }
 
-      window.addOptRow = function(uid, t) { const el = $(window.genOptRow(uid, t)); $(`#opts-wrap-${uid}`).append(el); el.find('.summernote-opt').summernote(snConfig); };
-      window.addPGKKRowTo = function(uid) { const el = $(window.genPGKKRow()); $(`#pgkk-tbody-${uid}`).append(el); el.find('.summernote-opt').summernote(snConfig); };
-      window.addMatchRowTo = function(uid) { const el = $(window.genMatchRow()); $(`#match-tbody-${uid}`).append(el); el.find('.summernote-opt').summernote(snConfig); };
-      window.removeOptRow = function(btn) { $(btn).closest('.ans-row').remove(); };
+      window.addOptRow = function(uid, t) { const el = $(window.genOptRow(uid, t)); $(`#opts-wrap-${uid}`).append(el); el.find('.summernote-opt').summernote(snConfig); }
+      window.addPGKKRowTo = function(uid) { const el = $(window.genPGKKRow()); $(`#pgkk-tbody-${uid}`).append(el); el.find('.summernote-opt').summernote(snConfig); }
+      window.addMatchRowTo = function(uid) { const el = $(window.genMatchRow()); $(`#match-tbody-${uid}`).append(el); el.find('.summernote-opt').summernote(snConfig); }
+      window.removeOptRow = function(btn) { $(btn).closest('.ans-row').remove(); }
 
       window.saveQBlock = function(uid) {
           const form = $(`#frm-q-${uid}`); const type = form.find('select[name="type"]').val(); const text = $(`#sn-${uid}`).summernote('code');
@@ -776,7 +939,7 @@ export default function Page() {
                   else { window.currentQuestionsData.push(newData); window.currentQuestionsData.sort((a,b) => (Number(a.Nomor)||999) - (Number(b.Nomor)||999)); }
               } else window.Swal.fire('Error',res.msg,'error');
           }).withFailureHandler(err => { btn.prop('disabled',false).text('Simpan'); window.Swal.fire('Error', err.message, 'error'); }).adminSaveSingleQuestion(window.activeExamId, payload);
-      };
+      }
 
       window.deleteQBlock = function(uid) {
           const id=$(`#block-${uid}`).find('input[name="id"]').val();
@@ -788,7 +951,7 @@ export default function Page() {
                   window.currentQuestionsData = window.currentQuestionsData.filter(q => String(q.QID) !== String(id));
               }
           });
-      };
+      }
 
       window.startExam = function(eid) {
           try { if (screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); } } catch (e) {}
@@ -808,7 +971,7 @@ export default function Page() {
                   }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getExamPack(eid, window.user.ID);
               }
           });
-      };
+      }
 
       window.refreshUjianSiswa = function() {
           window.Swal.fire({ title: 'Refresh Data Ujian?', text: 'Ini akan menyegarkan data soal tanpa menghilangkan jawaban Anda yang sudah tersimpan di sistem.', icon: 'info', showCancelButton: true, confirmButtonText: 'Ya, Refresh' }).then(r => {
@@ -821,19 +984,19 @@ export default function Page() {
                   }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getExamPack(window.activeExamId, window.user.ID);
               }
           });
-      };
+      }
 
-      window.enableSecurity = function() { window.violationCount = 0; window.isExamFinished = false; window.violationLock = false; document.addEventListener("visibilitychange", window.handleVisibilityChange); window.addEventListener("blur", window.handleWindowBlur); document.addEventListener("fullscreenchange", window.handleFullscreenChange); $(document).on("contextmenu.exam", function(e) { e.preventDefault(); return false; }); $(document).on("keydown.exam", function(e) { if (e.key === "PrintScreen" || (e.ctrlKey && e.key === "p") || (e.key === "F12")) { e.preventDefault(); return false; } }); };
-      window.disableSecurity = function() { document.removeEventListener("visibilitychange", window.handleVisibilityChange); window.removeEventListener("blur", window.handleWindowBlur); document.removeEventListener("fullscreenchange", window.handleFullscreenChange); $(document).off(".exam"); };
-      window.handleVisibilityChange = function() { if (!window.isExamFinished && document.hidden) window.triggerViolation("Anda keluar dari tab ujian!"); };
-      window.handleWindowBlur = function() { if (!window.isExamFinished) window.triggerViolation("Anda meninggalkan halaman ujian!"); };
-      window.handleFullscreenChange = function() { if (!window.isExamFinished && !document.fullscreenElement) { window.triggerViolation("Anda keluar dari mode fullscreen!"); try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} } };
+      window.enableSecurity = function() { window.violationCount = 0; window.isExamFinished = false; window.violationLock = false; document.addEventListener("visibilitychange", window.handleVisibilityChange); window.addEventListener("blur", window.handleWindowBlur); document.addEventListener("fullscreenchange", window.handleFullscreenChange); $(document).on("contextmenu.exam", function(e) { e.preventDefault(); return false; }); $(document).on("keydown.exam", function(e) { if (e.key === "PrintScreen" || (e.ctrlKey && e.key === "p") || (e.key === "F12")) { e.preventDefault(); return false; } }); }
+      window.disableSecurity = function() { document.removeEventListener("visibilitychange", window.handleVisibilityChange); window.removeEventListener("blur", window.handleWindowBlur); document.removeEventListener("fullscreenchange", window.handleFullscreenChange); $(document).off(".exam"); }
+      window.handleVisibilityChange = function() { if (!window.isExamFinished && document.hidden) window.triggerViolation("Anda keluar dari tab ujian!"); }
+      window.handleWindowBlur = function() { if (!window.isExamFinished) window.triggerViolation("Anda meninggalkan halaman ujian!"); }
+      window.handleFullscreenChange = function() { if (!window.isExamFinished && !document.fullscreenElement) { window.triggerViolation("Anda keluar dari mode fullscreen!"); try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} } }
 
       window.triggerViolation = function(msg) {
           if(window.violationLock || window.isExamFinished) return; window.violationLock = true; window.violationCount++; $('#viol-disp').text(window.violationCount);
           if (window.violationCount >= window.activeExamViolations) { window.playBeep(0, true); window.isExamFinished = true; window.submitExamButton(true); } 
           else { window.playBeep(window.violationCount, false); window.Swal.fire({ icon: 'warning', title: 'PERINGATAN PELANGGARAN!', text: `${msg} (${window.violationCount}/${window.activeExamViolations})`, confirmButtonText: 'KEMBALI KE UJIAN', allowOutsideClick: false }).then(() => { window.violationLock = false; try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} }); }
-      };
+      }
 
       window.runExam = function(qs, dur, isResume) {
           $('#view-dashboard').addClass('hidden'); $('#view-exam').removeClass('hidden'); $('body').addClass('exam-mode');
@@ -875,7 +1038,7 @@ export default function Page() {
               const key = `ANS_${window.user.ID}_${window.activeExamId}`;
               try { const stored = localStorage.getItem(key); if(stored) { let data = JSON.parse(decodeURIComponent(atob(stored))); window.google.script.run.autosaveAnswer(window.activeExamId, window.user.ID, JSON.stringify(data)); } } catch(e){}
           }, 60000);
-      };
+      }
 
       window.saveAnsLocal = function(qid, type, idx) {
           let val; 
@@ -890,7 +1053,7 @@ export default function Page() {
           currentData[qid] = val;
           try { localStorage.setItem(key, btoa(encodeURIComponent(JSON.stringify(currentData)))); } catch(e) {}
           window.markAns(idx);
-      };
+      }
 
       window.restoreAnswers = function(qs) {
           const key = `ANS_${window.user.ID}_${window.activeExamId}`;
@@ -907,11 +1070,11 @@ export default function Page() {
                   else if(q.Tipe === 'Menjodohkan') { $(`#ans-in-${idx}`).val(JSON.stringify(val)); setTimeout(() => window.redrawMatchLines(idx, val, q.Extra), 500); } 
               } 
           });
-      };
+      }
 
-      window.markAns = function(i) { $(`#nb-${i}`).addClass('answered'); };
-      window.jump = function(i) { window.currentQIdx = i; $('.q-slide').addClass('hidden');$(`#sl-${i}`).removeClass('hidden'); $('.q-nav-btn').removeClass('active-q');$(`#nb-${i}`).addClass('active-q'); if($(`#sl-${i}`).data('type')==='Menjodohkan') setTimeout(()=>window.drawLines(i), 50); window.applyMathJax(); };
-      window.navSlide = function(dir) { let next = window.currentQIdx + dir; if(next >= 0 && next < window.totalQ) window.jump(next); };
+      window.markAns = function(i) { $(`#nb-${i}`).addClass('answered'); }
+      window.jump = function(i) { window.currentQIdx = i; $('.q-slide').addClass('hidden');$(`#sl-${i}`).removeClass('hidden'); $('.q-nav-btn').removeClass('active-q');$(`#nb-${i}`).addClass('active-q'); if($(`#sl-${i}`).data('type')==='Menjodohkan') setTimeout(()=>window.drawLines(i), 50); window.applyMathJax(); }
+      window.navSlide = function(dir) { let next = window.currentQIdx + dir; if(next >= 0 && next < window.totalQ) window.jump(next); }
 
       window.submitExamButton = function(force = false) {
           if (window.examSubmitting) return;
@@ -935,7 +1098,7 @@ export default function Page() {
                   return true;
               }
           }).then((result) => { if (result.isConfirmed) { window.processSubmission(); } });
-      };
+      }
 
       window.processSubmission = function(retryCount = 0) {
           if (window.examSubmitting && retryCount === 0) return;
@@ -977,14 +1140,14 @@ export default function Page() {
               if (retryCount < 3) { setTimeout(() => window.processSubmission(retryCount + 1), 3000); } 
               else { window.examSubmitting = false; btn.prop('disabled', false).html(originalText); window.Swal.fire('Koneksi Terputus', 'Gagal menghubungi server setelah beberapa percobaan. Silakan coba klik Kirim lagi.', 'error'); }
           }).submitExam(window.user.ID, window.activeExamId, ans, window.violationCount);
-      };
+      }
 
-      window.matchClick = function(qIdx, side, itemIdx, el) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; const st = window.matchState[qIdx]; $(`#match-area-${qIdx} .match-${side}`).removeClass('selected'); $(el).addClass('selected'); if(side === 'l') { st.sel = { idx: itemIdx, el: el }; } else { if(st.sel) { st.pairs = st.pairs.filter(p => p.left !== st.sel.idx); st.pairs.push({ left: st.sel.idx, right: itemIdx, rightVal: decodeURIComponent($(el).data('val')) }); window.drawLines(qIdx); window.markAns(qIdx); st.sel = null; $(`#match-area-${qIdx} .match-item`).removeClass('selected'); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); } } };
-      window.drawLines = function(qIdx) { if(!window.matchState[qIdx]) return; const svg = document.getElementById(`svg-${qIdx}`); const container = document.getElementById(`match-area-${qIdx}`); if(!container || !svg) return; const rectC = container.getBoundingClientRect(); let html = ''; let answerArr = []; const leftCount = $(`#col-l-${qIdx}`).children().length; for(let k=0; k<leftCount; k++) answerArr[k] = null; $(`#match-area-${qIdx} .match-item`).removeClass('matched'); window.matchState[qIdx].pairs.forEach(p => { const elL = $(`#col-l-${qIdx}`).children().eq(p.left)[0]; const elR = $(`#col-r-${qIdx}`).children().eq(p.right)[0]; if(elL && elR) { const rL = elL.getBoundingClientRect(); const rR = elR.getBoundingClientRect(); const x1 = rL.right - rectC.left; const y1 = (rL.top + rL.height/2) - rectC.top; const x2 = rR.left - rectC.left; const y2 = (rR.top + rR.height/2) - rectC.top; html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#84cc16" stroke-width="3" />`; $(elL).addClass('matched'); $(elR).addClass('matched'); answerArr[p.left] = p.rightVal; } }); svg.innerHTML = html; $(`#ans-in-${qIdx}`).val(JSON.stringify(answerArr)); };
-      window.resetMatch = function(qIdx) { window.matchState[qIdx] = { sel: null, pairs: [] }; document.getElementById(`svg-${qIdx}`).innerHTML = ''; $(`#match-area-${qIdx} .match-item`).removeClass('matched selected'); $(`#ans-in-${qIdx}`).val(''); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); };
-      window.redrawMatchLines = function(qIdx, savedArr, rightItems) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; if(Array.isArray(savedArr)) { window.matchState[qIdx].pairs = []; savedArr.forEach((val, lIdx) => { if(val) { const rIdx = rightItems.indexOf(val); if(rIdx > -1) { window.matchState[qIdx].pairs.push({ left: lIdx, right: rIdx, rightVal: val }); } } }); window.drawLines(qIdx); } };
+      window.matchClick = function(qIdx, side, itemIdx, el) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; const st = window.matchState[qIdx]; $(`#match-area-${qIdx} .match-${side}`).removeClass('selected'); $(el).addClass('selected'); if(side === 'l') { st.sel = { idx: itemIdx, el: el }; } else { if(st.sel) { st.pairs = st.pairs.filter(p => p.left !== st.sel.idx); st.pairs.push({ left: st.sel.idx, right: itemIdx, rightVal: decodeURIComponent($(el).data('val')) }); window.drawLines(qIdx); window.markAns(qIdx); st.sel = null; $(`#match-area-${qIdx} .match-item`).removeClass('selected'); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); } } }
+      window.drawLines = function(qIdx) { if(!window.matchState[qIdx]) return; const svg = document.getElementById(`svg-${qIdx}`); const container = document.getElementById(`match-area-${qIdx}`); if(!container || !svg) return; const rectC = container.getBoundingClientRect(); let html = ''; let answerArr = []; const leftCount = $(`#col-l-${qIdx}`).children().length; for(let k=0; k<leftCount; k++) answerArr[k] = null; $(`#match-area-${qIdx} .match-item`).removeClass('matched'); window.matchState[qIdx].pairs.forEach(p => { const elL = $(`#col-l-${qIdx}`).children().eq(p.left)[0]; const elR = $(`#col-r-${qIdx}`).children().eq(p.right)[0]; if(elL && elR) { const rL = elL.getBoundingClientRect(); const rR = elR.getBoundingClientRect(); const x1 = rL.right - rectC.left; const y1 = (rL.top + rL.height/2) - rectC.top; const x2 = rR.left - rectC.left; const y2 = (rR.top + rR.height/2) - rectC.top; html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#84cc16" stroke-width="3" />`; $(elL).addClass('matched'); $(elR).addClass('matched'); answerArr[p.left] = p.rightVal; } }); svg.innerHTML = html; $(`#ans-in-${qIdx}`).val(JSON.stringify(answerArr)); }
+      window.resetMatch = function(qIdx) { window.matchState[qIdx] = { sel: null, pairs: [] }; document.getElementById(`svg-${qIdx}`).innerHTML = ''; $(`#match-area-${qIdx} .match-item`).removeClass('matched selected'); $(`#ans-in-${qIdx}`).val(''); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); }
+      window.redrawMatchLines = function(qIdx, savedArr, rightItems) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; if(Array.isArray(savedArr)) { window.matchState[qIdx].pairs = []; savedArr.forEach((val, lIdx) => { if(val) { const rIdx = rightItems.indexOf(val); if(rIdx > -1) { window.matchState[qIdx].pairs.push({ left: lIdx, right: rIdx, rightVal: val }); } } }); window.drawLines(qIdx); } }
 
-      window.editUser = function(s){ const u=JSON.parse(decodeURIComponent(s)); $('#modalUser').modal('show'); $('#mu-id').val(u.ID); $('#mu-nama').val(u.Nama); $('#mu-user').val(u.Username); $('#mu-pass').val(u.Password); $('#mu-role').val(u.Role); $('#mu-kelas').val(u.Kelas); $('#mu-sekolah').val(u.Sekolah); };
+      window.editUser = function(s){ const u=JSON.parse(decodeURIComponent(s)); $('#modalUser').modal('show'); $('#mu-id').val(u.ID); $('#mu-nama').val(u.Nama); $('#mu-user').val(u.Username); $('#mu-pass').val(u.Password); $('#mu-role').val(u.Role); $('#mu-kelas').val(u.Kelas); $('#mu-sekolah').val(u.Sekolah); }
       
       window.saveUser = function() { 
           const d={id:$('#mu-id').val(), nama:$('#mu-nama').val(), username:$('#mu-user').val(), password:$('#mu-pass').val(), role:$('#mu-role').val(), kelas:$('#mu-kelas').val(), sekolah:$('#mu-sekolah').val()}; 
@@ -998,9 +1161,9 @@ export default function Page() {
           }).adminManageUser('save',d); 
       };
       
-      window.delUser = function(id){ if(confirm('Hapus User?')) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.loadPage('admin-users');}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error')}).adminManageUser('delete',{id:id}); } };
-      window.handleResetCache = function() { window.Swal.fire({title:'Reset Cache?', text:"Membersihkan data sementara sistem.", icon:'warning', showCancelButton:true}).then((r)=>{ if(r.isConfirmed){ window.showLoad(true); window.google.script.run.withSuccessHandler(r=>{window.showLoad(false);window.Swal.fire('Sukses',r.msg,'success')}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).sysResetCache(); }}); };
-      window.deleteResult = function(rid) { window.Swal.fire({title:'Hapus & Reset Ujian?', text:'Data dihapus, cache/status ujian direset, dan siswa bisa ujian kembali.', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33'}).then(r=>{ if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(res=>{ window.showLoad(false); if(res.status==='success'){ window.Swal.fire('Berhasil',res.msg,'success'); window.loadPage('hasil-rekap'); } else window.Swal.fire('Gagal',res.msg,'error'); }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminDeleteResult(rid); } }); };
+      window.delUser = function(id){ if(confirm('Hapus User?')) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.loadPage('admin-users');}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error')}).adminManageUser('delete',{id:id}); } }
+      window.handleResetCache = function() { window.Swal.fire({title:'Reset Cache?', text:"Membersihkan data sementara sistem.", icon:'warning', showCancelButton:true}).then((r)=>{ if(r.isConfirmed){ window.showLoad(true); window.google.script.run.withSuccessHandler(r=>{window.showLoad(false);window.Swal.fire('Sukses',r.msg,'success')}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).sysResetCache(); }}); }
+      window.deleteResult = function(rid) { window.Swal.fire({title:'Hapus & Reset Ujian?', text:'Data dihapus, cache/status ujian direset, dan siswa bisa ujian kembali.', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33'}).then(r=>{ if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(res=>{ window.showLoad(false); if(res.status==='success'){ window.Swal.fire('Berhasil',res.msg,'success'); window.loadPage('hasil-rekap'); } else window.Swal.fire('Gagal',res.msg,'error'); }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminDeleteResult(rid); } }); }
 
       window.renderMonitoring = function(){ 
           window.showLoad(true); 
@@ -1014,10 +1177,10 @@ export default function Page() {
               </div><div id="mon-area" class="bg-white p-3 rounded shadow-sm" style="min-height:200px">Silakan pilih ujian untuk memonitor progres secara Live.</div>`; 
               $('#content-area').html(h); 
           }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas); 
-      };
+      }
 
-      window.startMon = function(){ const id=$('#mon-sel').val(); if(id){ window.fetchMon(id); clearInterval(window.monitorInterval); window.monitorInterval=setInterval(()=>window.fetchMon(id),10000); } else $('#mon-area').empty(); };
-      window.fetchMon = function(id){ window.google.script.run.withSuccessHandler(r=>{ if(r.status==='error') { $('#mon-area').html(`<div class="alert alert-warning">${r.msg}</div>`); return; } let h=`<table id="tbl-mon" class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama</th><th>Progress</th><th>Status</th><th>Aksi</th></tr></thead><tbody>`; (r?.data || []).forEach(d=>{ const p=Math.round((d.terjawab/d.total)*100)||0; h+=`<tr data-uid="${d.id}" data-nama="${d.nama}"><td><div class="fw-bold">${d.nama}</div><small class="text-muted">${d.kelas}</small></td><td><div class="progress" style="height:20px"><div class="progress-bar bg-success" style="width:${p}%">${d.terjawab}/${d.total}</div></div></td><td>${d.status==='Online'?'<span class="badge bg-success">ON</span>':'<span class="badge bg-secondary">OFF</span>'}</td><td><button class="btn btn-sm btn-outline-danger" onclick="window.triggerReset('${d.id}', '${d.nama}')">Reset User</button></td></tr>` }); $('#content-area').html(h+'</tbody></table>'); const cur=$('#mon-search').val(); if(cur) window.filterTable('tbl-mon', cur); }).withFailureHandler(err => console.log(err)).getLiveMonitoring(id, window.user.Role, window.user.Kelas); };
+      window.startMon = function(){ const id=$('#mon-sel').val(); if(id){ window.fetchMon(id); clearInterval(window.monitorInterval); window.monitorInterval=setInterval(()=>window.fetchMon(id),10000); } else $('#mon-area').empty(); }
+      window.fetchMon = function(id){ window.google.script.run.withSuccessHandler(r=>{ if(r.status==='error') { $('#mon-area').html(`<div class="alert alert-warning">${r.msg}</div>`); return; } let h=`<table id="tbl-mon" class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama</th><th>Progress</th><th>Status</th><th>Aksi</th></tr></thead><tbody>`; (r?.data || []).forEach(d=>{ const p=Math.round((d.terjawab/d.total)*100)||0; h+=`<tr data-uid="${d.id}" data-nama="${d.nama}"><td><div class="fw-bold">${d.nama}</div><small class="text-muted">${d.kelas}</small></td><td><div class="progress" style="height:20px"><div class="progress-bar bg-success" style="width:${p}%">${d.terjawab}/${d.total}</div></div></td><td>${d.status==='Online'?'<span class="badge bg-success">ON</span>':'<span class="badge bg-secondary">OFF</span>'}</td><td><button class="btn btn-sm btn-outline-danger" onclick="window.triggerReset('${d.id}', '${d.nama}')">Reset User</button></td></tr>` }); $('#content-area').html(h+'</tbody></table>'); const cur=$('#mon-search').val(); if(cur) window.filterTable('tbl-mon', cur); }).withFailureHandler(err => console.log(err)).getLiveMonitoring(id, window.user.Role, window.user.Kelas); }
 
       window.triggerReset = function(sId, sName) { 
           const eId = $('#mon-sel').val(); if(!sId || !eId) return window.Swal.fire('Perhatian', 'Pilih ujian terlebih dahulu', 'warning'); 
@@ -1029,7 +1192,7 @@ export default function Page() {
                   }).withFailureHandler(err => window.Swal.fire('Error', err.message, 'error')).teacherResetStatus(sId, eId, window.user.Role, window.user.Kelas); 
               } 
           }); 
-      };
+      }
 
       window.triggerResetMassal = function() {
           const eId = $('#mon-sel').val(); 
@@ -1049,9 +1212,9 @@ export default function Page() {
                   }).withFailureHandler(err => window.Swal.fire('Error', err.message, 'error')).teacherResetMassal(eId, window.user.Role, window.user.Kelas);
               }
           })
-      };
+      }
 
-      window.filterTable = function(tid, q) { const f=q.toLowerCase(); $(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); };
+      window.filterTable = function(tid, q) { const f=q.toLowerCase(); $(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); }
 
       // ==========================================
       // ON DOCUMENT READY (SINKRONISASI USER LAMA)
@@ -1059,12 +1222,10 @@ export default function Page() {
       const savedUser = localStorage.getItem('cbt_user');
       if(savedUser) {
           window.user = JSON.parse(savedUser);
-          setTimeout(() => {
-              const logoEl = document.querySelector('#logo-container img');
-              if (logoEl) logoEl.src = window.user.LogoUrl || LOGO_BARU;
-              window.initDash();
-              window.checkResumeExam();
-          }, 300);
+          const logoEl = document.querySelector('#logo-container img');
+          if (logoEl) logoEl.src = window.user.LogoUrl || LOGO_BARU;
+          window.initDash();
+          window.checkResumeExam();
       }
     };
 
@@ -1116,8 +1277,8 @@ export default function Page() {
           .badge.bg-primary { background-color: var(--primary) !important; }
           .badge.bg-success { background-color: var(--accent) !important; }
 
-          /* PERBAIKAN TAMPILAN LOGIN (SPLIT KIRI KANAN YANG SEMPURNA) */
-          .auth-wrapper { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(126,34,206,0.95) 0%, rgba(132,204,22,0.95) 100%); padding: 20px; }
+          /* PERBAIKAN TAMPILAN LOGIN (SPLIT KIRI KANAN) */
+          .auth-wrapper { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(126,34,206,0.95) 0%, rgba(132,204,22,0.95) 100%); padding: 20px; position: relative; }
           .auth-card-split { display: flex; background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); max-width: 900px; width: 100%; overflow: hidden; z-index: 2; margin-bottom: 20px; min-height: 400px; }
           .auth-left { flex: 1; background: linear-gradient(135deg, rgba(126,34,206,1) 0%, rgba(132,204,22,1) 100%); color: white; padding: 40px; display: flex; flex-direction: column; justify-content: center; }
           .auth-right { flex: 1; padding: 40px; display: flex; flex-direction: column; justify-content: center; background: white; }
@@ -1170,7 +1331,7 @@ export default function Page() {
         <div id="loader" class="loader hidden"><div class="spinner"></div></div>
         <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
         
-        <!-- LAYAR LOGIN SPLIT KIRI-KANAN (ANTI RELOAD/MACET) -->
+        <!-- LAYAR LOGIN SPLIT (ANTI RELOAD/MACET) -->
         <div id="view-auth" class="auth-wrapper">
             <div class="auth-card-split">
                 <div class="auth-left">
@@ -1196,7 +1357,7 @@ export default function Page() {
                             <label>Password</label>
                             <i class="fas fa-eye position-absolute top-50 end-0 translate-middle-y me-3 text-muted" id="togglePassword" style="cursor: pointer; z-index: 100; pointer-events: auto;" onclick="window.togglePwd()"></i>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">MASUK SEKARANG</button>
+                        <button type="button" class="btn btn-primary w-100 py-2 fw-bold shadow-sm" onclick="window.handleLogin()">MASUK SEKARANG</button>
                     </form>
                 </div>
             </div>
@@ -1277,7 +1438,7 @@ export default function Page() {
                 <div class="modal-content">
                     <div class="modal-header bg-primary text-white"><h5 class="modal-title">Konfigurasi Ujian</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;">
+                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;" action="javascript:void(0);">
                             <input type="hidden" id="ex-id" name="examId">
                             <div class="mb-3"><label class="small fw-bold">Judul Ujian</label><input type="text" name="judul" id="ex-judul" class="form-control" required></div>
                             <div class="row g-3 mb-3">
@@ -1337,7 +1498,7 @@ export default function Page() {
                 <div class="modal-content">
                     <div class="modal-header bg-success text-white"><h5 class="modal-title">User Editor</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <form id="frm-user" onsubmit="event.preventDefault(); window.saveUser(); return false;">
+                        <form id="frm-user" onsubmit="event.preventDefault(); window.saveUser(); return false;" action="javascript:void(0);">
                             <input type="hidden" id="mu-id">
                             <input type="text" id="mu-nama" class="form-control mb-2" placeholder="Nama Lengkap" required>
                             <input type="text" id="mu-user" class="form-control mb-2" placeholder="Username" required>
