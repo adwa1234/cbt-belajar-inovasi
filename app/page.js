@@ -42,7 +42,7 @@ export default function Page() {
     let beepInterval = null;
 
     // =================================================================
-    // 2. FUNGSI NATIVE & UI
+    // 2. FUNGSI NATIVE & UI (MENGGUNAKAN VANILLA JS AGAR ANTI GAGAL)
     // =================================================================
     window.showLoad = function(show) {
         const loader = document.getElementById('loader');
@@ -69,8 +69,10 @@ export default function Page() {
     };
 
     window.toggleSidebar = function() { 
-        const $ = window.jQuery;
-        if($) { $('#sidebar').toggleClass('active'); $('#sidebar-overlay').toggleClass('active'); }
+        const sb = document.getElementById('sidebar');
+        const sbo = document.getElementById('sidebar-overlay');
+        if(sb) sb.classList.toggle('active'); 
+        if(sbo) sbo.classList.toggle('active');
     };
 
     window.toast = function(icon, title) { 
@@ -79,7 +81,7 @@ export default function Page() {
     };
 
     // =================================================================
-    // 3. PROXY API (ROOT CAUSE FIXED: DIJAMIN 100% ANTI-MACET & LANJUT KE DASHBOARD)
+    // 3. PROXY API (PENGHUBUNG KE TURSO - DIJAMIN STABIL)
     // =================================================================
     window.google = {
       script: {
@@ -88,8 +90,6 @@ export default function Page() {
           
           const proxy = new Proxy(runner, {
             get: function (target, prop) {
-              // PERBAIKAN FATAL BUG: Kembalikan instance 'proxy' (bukan 'this' atau 'target') 
-              // agar chaining method (seperti .getDashboardData) tidak undefined/macet.
               if (prop === "withSuccessHandler") {
                   return function (fn) { target.successFn = fn; return proxy; };
               }
@@ -116,6 +116,7 @@ export default function Page() {
                     window.showLoad(false); 
                     if (target.failureFn) target.failureFn(err); 
                     else if (window.Swal) window.Swal.fire("Koneksi Gagal", err.message, "error");
+                    else alert("Koneksi Error: " + err.message);
                 });
               };
             }
@@ -175,7 +176,7 @@ export default function Page() {
     window.initDash = function() {
         if(!window.user) return;
         
-        // Atasi Tumpang Tindih Layout
+        // Atasi Tumpang Tindih Layout dengan Vanilla JS Murni
         const authView = document.getElementById('view-auth');
         const dashView = document.getElementById('view-dashboard');
         
@@ -211,6 +212,7 @@ export default function Page() {
         } 
         else { 
             if(window.Swal) window.Swal.fire('Akses Ditolak', 'Role akun tidak dikenali.', 'error'); 
+            else alert("Akses Ditolak: Role Tidak Dikenali");
         }
     };
 
@@ -232,22 +234,25 @@ export default function Page() {
         if(window.disableSecurity) window.disableSecurity(); 
         if(window.stopContinuousBeep) window.stopContinuousBeep();
         
-        const $ = window.jQuery;
-        if(!$) { setTimeout(() => window.loadPage(page), 200); return; }
-
-        $('#view-exam').addClass('hidden'); 
-        $('#view-dashboard').removeClass('hidden'); 
-        $('body').removeClass('exam-mode');
+        // Pindah navigasi dengan Vanilla JS murni
+        const viewExam = document.getElementById('view-exam');
+        const viewDash = document.getElementById('view-dashboard');
+        if(viewExam) viewExam.classList.add('hidden');
+        if(viewDash) viewDash.classList.remove('hidden');
+        document.body.classList.remove('exam-mode');
         
         const titleEl = document.getElementById('page-title');
         if(titleEl) titleEl.innerText = page.replace('-', ' ').toUpperCase();
         
-        $('.nav-link').removeClass('active'); 
-        $(`a[onclick="window.loadPage('${page}')"]`).addClass('active');
+        document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+        const activeLink = document.querySelector(`a[onclick="window.loadPage('${page}')"]`);
+        if(activeLink) activeLink.classList.add('active');
         
         if(window.innerWidth <= 768) { 
-            $('#sidebar').removeClass('active'); 
-            $('#sidebar-overlay').removeClass('active'); 
+            const sb = document.getElementById('sidebar');
+            const sbo = document.getElementById('sidebar-overlay');
+            if(sb) sb.classList.remove('active'); 
+            if(sbo) sbo.classList.remove('active'); 
         }
         
         if(page === 'admin-users') {
@@ -256,16 +261,25 @@ export default function Page() {
                 window.showLoad(false);
                 if(r.status === 'success') window.renderUsers(r.data); 
                 else if(window.Swal) window.Swal.fire('Error', r.msg, 'error');
-            }).withFailureHandler(e => { window.showLoad(false); if(window.Swal) window.Swal.fire('Error', e.message, 'error'); }).getUserList(window.user.Role, window.user.ID, window.user.Kelas);
+                else alert('Error: ' + r.msg);
+            }).withFailureHandler(e => { 
+                window.showLoad(false); 
+                if(window.Swal) window.Swal.fire('Error', e.message, 'error'); 
+                else alert('Error: ' + e.message);
+            }).getUserList(window.user.Role, window.user.ID, window.user.Kelas);
             return;
         }
         if(page === 'hasil-rekap') {
-            window.showLoad(true);
+            const area = document.getElementById('content-area');
+            if(area) area.innerHTML = '<div class="text-center p-5"><div class="spinner"></div></div>';
+            
             window.google.script.run.withSuccessHandler(r => {
-                window.showLoad(false);
                 if(r.status === 'success') { window.recapAllData = r.data; window.renderRecapTable(); }
-                else { $('#content-area').html(`<div class="alert alert-danger">${r.msg}</div>`); }
-            }).withFailureHandler(e => { window.showLoad(false); if(window.Swal) window.Swal.fire('Error', e.message, 'error'); }).getRecapList(window.user.Role, window.user.ID, window.user.Kelas);
+                else { if(area) area.innerHTML = `<div class="alert alert-danger">${r.msg}</div>`; }
+            }).withFailureHandler(e => { 
+                if(window.Swal) window.Swal.fire('Error', e.message, 'error'); 
+                else alert('Error: ' + e.message);
+            }).getRecapList(window.user.Role, window.user.ID, window.user.Kelas);
             return;
         }
         if(page === 'guru-monitoring') { window.renderMonitoring(); return; }
@@ -275,16 +289,32 @@ export default function Page() {
                 window.showLoad(false);
                 if(r.status === 'success') { window.gAdminData = r; window.renderAdministrasi(); } 
                 else if(window.Swal) window.Swal.fire('Error', r.msg, 'error');
-            }).withFailureHandler(e => { window.showLoad(false); if(window.Swal) window.Swal.fire('Error', e.message, 'error'); }).getAdminData(window.user.Role, window.user.ID, window.user.Kelas);
+                else alert('Error: ' + r.msg);
+            }).withFailureHandler(e => { 
+                window.showLoad(false); 
+                if(window.Swal) window.Swal.fire('Error', e.message, 'error'); 
+                else alert('Error: ' + e.message);
+            }).getAdminData(window.user.Role, window.user.ID, window.user.Kelas);
             return;
         }
         
         window.showLoad(true);
         window.google.script.run.withSuccessHandler(res => {
             window.showLoad(false);
-            if (res.status === 'success') { window.gData = res.data; window.renderContent(page); if(window.applyMathJax) window.applyMathJax(); } 
-            else if(window.Swal) { window.Swal.fire('Error', res.msg, 'error'); }
-        }).withFailureHandler(e => { window.showLoad(false); if(window.Swal) window.Swal.fire('Error', e.message || 'Gagal memuat dashboard', 'error'); }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas);
+            if (res.status === 'success') { 
+                window.gData = res.data; 
+                window.renderContent(page); 
+                if(window.applyMathJax) window.applyMathJax(); 
+            } 
+            else {
+                if(window.Swal) window.Swal.fire('Error', res.msg, 'error');
+                else alert('Error: ' + res.msg);
+            }
+        }).withFailureHandler(e => { 
+            window.showLoad(false); 
+            if(window.Swal) window.Swal.fire('Error', e.message || 'Gagal memuat dashboard', 'error'); 
+            else alert('Error: Gagal memuat dashboard');
+        }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas);
     };
 
     window.handleLogout = function() {
@@ -295,12 +325,15 @@ export default function Page() {
             
             const authView = document.getElementById('view-auth');
             const dashView = document.getElementById('view-dashboard');
+            const examView = document.getElementById('view-exam');
+            const sb = document.getElementById('sidebar');
+            const sbo = document.getElementById('sidebar-overlay');
             
             if(dashView) { dashView.classList.add('hidden'); dashView.style.display = 'none'; }
-            $('#view-exam').addClass('hidden'); 
-            $('body').removeClass('exam-mode');
-            $('#sidebar').removeClass('active'); 
-            $('#sidebar-overlay').removeClass('active');
+            if(examView) examView.classList.add('hidden'); 
+            document.body.classList.remove('exam-mode');
+            if(sb) sb.classList.remove('active'); 
+            if(sbo) sbo.classList.remove('active');
             
             document.getElementById('u-login').value = ''; 
             document.getElementById('p-login').value = ''; 
@@ -316,11 +349,14 @@ export default function Page() {
         }
     };
 
-    // --- FUNGSI RENDER DASHBOARD ---
+    // =================================================================
+    // 5. FUNGSI RENDER DASHBOARD (MENGGUNAKAN PURE JS MENCEGAH BLANK)
+    // =================================================================
     window.renderContent = function(page) {
         try {
-            const $ = window.jQuery; if(!$) return;
-            const area = $('#content-area'); let h = '';
+            const area = document.getElementById('content-area'); 
+            if(!area) return;
+            let h = '';
             
             if (page === 'admin-home') {
                 const tSiswa = window.gData?.stats?.totalSiswa || 0;
@@ -367,16 +403,19 @@ export default function Page() {
                     h += `</tbody></table></div>`;
                 }
             }
-            area.html(h);
+            
+            // Injeksi dengan Vanilla JS Murni (Garanasi Tampil)
+            area.innerHTML = h;
+            
         } catch (err) {
             console.error("Render Content Error: ", err);
-            const $ = window.jQuery;
-            if($) $('#content-area').html(`<div class="alert alert-danger">Sistem sedang memproses data... Harap muat ulang halaman.</div>`);
+            const area = document.getElementById('content-area');
+            if(area) area.innerHTML = `<div class="alert alert-danger">Error memproses data: ${err.message}. Harap muat ulang halaman.</div>`;
         }
     };
 
     // =================================================================
-    // 5. SISANYA ADALAH FUNGSI SISTEM PELENGKAP UJIAN
+    // 6. SISANYA ADALAH FUNGSI SISTEM PELENGKAP UJIAN
     // =================================================================
     window.playBeep = function(times, continuous = false) {
         if(audioCtx.state === 'suspended') audioCtx.resume();
@@ -415,7 +454,8 @@ export default function Page() {
                     if(window.Swal) {
                         window.Swal.fire({ title: 'Lanjutkan Ujian?', text: 'Terdeteksi sesi ujian yang belum selesai.', icon: 'info', confirmButtonText: 'Lanjutkan', allowOutsideClick: false }).then(() => {
                             window.activeExamId = examState.id; window.totalQ = examState.qs.length; window.activeExamViolations = examState.maxV || 3;
-                            const $ = window.jQuery; if($) $('#do-exam-title').html(`${examState.judul} <span class="mx-2">|</span> ${window.user.Nama}`);
+                            const titleEl = document.getElementById('do-exam-title');
+                            if(titleEl) titleEl.innerHTML = `${examState.judul} <span class="mx-2">|</span> ${window.user.Nama}`;
                             if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch(()=>{}); }
                             window.runExam(examState.qs, examState.dur, true);
                         });
@@ -466,7 +506,6 @@ export default function Page() {
     };
 
     window.renderUsers = function(users) {
-        const $ = window.jQuery; if(!$) return;
         const cleanRole = String(window.user.Role).trim().toLowerCase(); const isAdmin = cleanRole === 'admin';
         let h = `<div class="d-flex justify-content-between mb-3 flex-wrap gap-2"><div>${isAdmin ? `<button class="btn btn-success shadow-sm me-2" onclick="window.jQuery('#modalUser').modal('show');window.jQuery('#modalUser form')[0].reset();window.jQuery('#mu-id').val('');">+ Tambah User</button> <button class="btn btn-outline-info shadow-sm me-2" onclick="window.generateUserExcelTemplate()"><i class="fas fa-download"></i> Template Excel</button> <label class="btn btn-primary shadow-sm m-0 me-2"><i class="fas fa-upload"></i> Upload Excel <input type="file" hidden accept=".xlsx,.xls" onchange="window.handleUploadUsersExcel(event)"></label> <button id="btn-bulk-del-users" class="btn btn-danger hidden shadow-sm me-2" onclick="window.bulkDeleteUsers()"><i class="fas fa-trash"></i> Hapus Terpilih</button>` : `<h5 class="fw-bold text-primary mb-0"><i class="fas fa-users me-2"></i>Data Siswa Kelas Anda</h5>`}</div><input type="text" id="user-search" class="form-control" style="width:250px" placeholder="Cari Siswa..." onkeyup="window.filterTable('tbl-users', this.value)"></div><div class="card border-0 shadow-sm"><div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0" id="tbl-users"><thead class="table-light"><tr>${isAdmin ? `<th width="5%"><input type="checkbox" id="cb-all-users" class="form-check-input" onchange="window.toggleAllCb('users')"></th>` : ''}<th>Nama</th><th>Username</th><th>Role</th><th>Kelas</th>${isAdmin ? '<th>Aksi</th>' : ''}</tr></thead><tbody>`;
         if(users && Array.isArray(users)) {
@@ -475,14 +514,17 @@ export default function Page() {
                 h += `<tr>${isAdmin ? `<td><input type="checkbox" class="cb-user form-check-input" value="${u.ID}" onchange="window.checkBulkDelete('users')"></td>` : ''}<td class="fw-bold">${u.Nama}</td><td>${u.Username}</td><td><span class="badge bg-${String(u.Role).trim().toLowerCase()==='admin'?'danger':(String(u.Role).trim().toLowerCase()==='guru'?'warning':'primary')}">${u.Role}</span></td><td>${u.Kelas || '-'}</td>${isAdmin ? `<td><button class="btn btn-sm btn-outline-dark me-1" onclick="window.editUser('${safeData}')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger" onclick="window.delUser('${u.ID}')"><i class="fas fa-trash"></i></button></td>` : ''}</tr>`;
             });
         }
-        h += `</tbody></table></div></div></div>`; $('#content-area').html(h);
+        h += `</tbody></table></div></div></div>`; 
+        const area = document.getElementById('content-area');
+        if(area) area.innerHTML = h;
     };
 
     window.renderRecapTable = function() {
-        const $ = window.jQuery; if(!$) return;
         const uniqueKelas = [...new Set(window.recapAllData.map(item => item.KelasSiswa))].sort(); const uniqueUjian = [...new Set(window.recapAllData.map(item => item.JudulUjian))].sort();
         let h = `<div class="d-flex justify-content-between align-items-center mb-3"><h5 class="fw-bold mb-0 text-primary"><i class="fas fa-chart-bar me-2"></i>Rekapitulasi Nilai</h5><div><button id="btn-bulk-del-rekap" class="btn btn-danger hidden shadow-sm me-2" onclick="window.bulkDeleteRekap()"><i class="fas fa-trash"></i> Hapus Terpilih</button><button class="btn btn-warning shadow-sm me-2" onclick="window.jQuery('#modalKatrol').modal('show')"><i class="fas fa-sort-amount-up me-1"></i> Katrol Nilai</button><button class="btn btn-success shadow-sm me-2" onclick="window.exportToExcel('tbl-rekap', 'Rekap_Nilai')"><i class="fas fa-file-excel me-1"></i> Export Excel</button><button class="btn btn-info shadow-sm text-white" onclick="window.printFilteredRecap()"><i class="fas fa-print me-1"></i> Cetak Rekap</button></div></div><div class="row g-2 mb-3"><div class="col-md-4"><select id="filter-ujian" class="form-select" onchange="window.applyFilter()"><option value="">Semua Ujian</option>${uniqueUjian.map(u => `<option value="${u}">${u}</option>`).join('')}</select></div><div class="col-md-4"><select id="filter-kelas" class="form-select" onchange="window.applyFilter()"><option value="">Semua Kelas</option>${uniqueKelas.map(k => `<option value="${k}">${k}</option>`).join('')}</select></div><div class="col-md-4"><input type="text" id="filter-search" class="form-control" placeholder="Cari Nama Siswa..." onkeyup="window.applyFilter()"></div></div><div class="card border-0 shadow-sm"><div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0" id="tbl-rekap"><thead class="table-light"><tr><th width="5%"><input type="checkbox" id="cb-all-rekap" class="form-check-input" onchange="window.toggleAllCb('rekap')"></th><th>Waktu</th><th>Nama Siswa</th><th>Kelas</th><th>Mata Pelajaran</th><th>Nilai Akhir</th><th>Aksi</th></tr></thead><tbody id="tbl-rekap-body"></tbody></table></div></div></div>`;
-        $('#content-area').html(h); window.applyFilter();
+        const area = document.getElementById('content-area');
+        if(area) area.innerHTML = h; 
+        window.applyFilter();
     };
 
     window.applyFilter = function() {
@@ -496,29 +538,28 @@ export default function Page() {
     };
 
     window.applyKatrolMassal = function() {
-        const $ = window.jQuery; if(!$) return;
-        const addVal = parseFloat($('#katrol-value').val()) || 0;
+        const addVal = parseFloat(document.getElementById('katrol-value').val) || parseFloat(window.jQuery('#katrol-value').val()) || 0;
         if(addVal === 0) { if(window.Swal) window.Swal.fire('Perhatian', 'Masukkan nilai katrol yang valid.', 'warning'); return; }
         if(!window.currentFilteredData || window.currentFilteredData.length === 0) { if(window.Swal) window.Swal.fire('Data Kosong', 'Tidak ada data di tabel untuk dikatrol.', 'info'); return; }
         if(window.Swal) {
             window.Swal.fire({ title: 'Konfirmasi Katrol Nilai', text: `Anda yakin menambahkan nilai sebesar ${addVal} ke ${window.currentFilteredData.length} siswa di tabel ini?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Eksekusi', }).then((result) => {
-                if(result.isConfirmed) { window.showLoad(true); const rids = window.currentFilteredData.map(d => d.ResultID); window.google.script.run.withSuccessHandler(res => { window.showLoad(false); $('#modalKatrol').modal('hide'); if (res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); } else { window.Swal.fire('Gagal', res.msg, 'error'); } }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminKatrolMassal(rids, addVal); }
+                if(result.isConfirmed) { window.showLoad(true); const rids = window.currentFilteredData.map(d => d.ResultID); window.google.script.run.withSuccessHandler(res => { window.showLoad(false); window.jQuery('#modalKatrol').modal('hide'); if (res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); } else { window.Swal.fire('Gagal', res.msg, 'error'); } }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminKatrolMassal(rids, addVal); }
             });
         }
     };
 
     window.renderAdministrasi = function() {
-        const $ = window.jQuery; if(!$) return;
         const uniqueKelas = [...new Set((window.gAdminData.users || []).map(u => String(u.Kelas).trim()))].filter(k => k).sort();
         let optKelas = `<option value="ALL">Semua Kelas</option>` + uniqueKelas.map(k => `<option value="${k}">${k}</option>`).join('');
         let optUjian = `<option value="">-- Pilih Ujian --</option>` + (window.gAdminData.exams || []).map(e => `<option value="${e.ExamID}">${e.Judul} (${e.Mapel})</option>`).join('');
         let h = `<div class="row g-4"><div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h5 class="fw-bold text-primary"><i class="fas fa-id-card me-2"></i>Cetak Kartu Login</h5><p class="small text-muted">Cetak kartu akun siswa untuk login aplikasi CBT.</p><label class="small fw-bold">Filter Kelas</label><select id="adm-kls-kartu" class="form-select mb-3">${optKelas}</select><button class="btn btn-primary w-100" onclick="window.printKartuLogin()"><i class="fas fa-print me-1"></i> Cetak Kartu</button></div></div></div><div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h5 class="fw-bold text-info"><i class="fas fa-clipboard-list me-2"></i>Cetak Daftar Hadir</h5><p class="small text-muted">Format absensi siswa saat pelaksanaan ujian.</p><label class="small fw-bold">Pilih Ujian</label><select id="adm-exam-hadir" class="form-select mb-2">${optUjian}</select><label class="small fw-bold">Filter Kelas</label><select id="adm-kls-hadir" class="form-select mb-3">${optKelas}</select><button class="btn btn-info text-white w-100" onclick="window.printDaftarHadir()"><i class="fas fa-print me-1"></i> Cetak Daftar Hadir</button></div></div></div><div class="col-md-4"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h5 class="fw-bold text-success"><i class="fas fa-file-signature me-2"></i>Cetak Berita Acara</h5><p class="small text-muted">Format laporan pelaksanaan ujian untuk pengawas.</p><label class="small fw-bold">Pilih Ujian</label><select id="adm-exam-ba" class="form-select mb-2">${optUjian}</select><label class="small fw-bold">Filter Kelas</label><select id="adm-kls-ba" class="form-select mb-3">${optKelas}</select><button class="btn btn-success w-100" onclick="window.printBeritaAcara()"><i class="fas fa-print me-1"></i> Cetak Berita Acara</button></div></div></div></div>`;
-        $('#content-area').html(h);
+        const area = document.getElementById('content-area');
+        if(area) area.innerHTML = h;
     };
 
     window.printKartuLogin = function() {
-        const $ = window.jQuery; if(!$) return;
-        const kls = $('#adm-kls-kartu').val(); let usersToPrint = window.gAdminData.users || [];
+        const kls = document.getElementById('adm-kls-kartu') ? document.getElementById('adm-kls-kartu').value : 'ALL';
+        let usersToPrint = window.gAdminData.users || [];
         if (kls !== 'ALL') usersToPrint = usersToPrint.filter(u => u.Kelas === kls);
         if (usersToPrint.length === 0) { if(window.Swal) window.Swal.fire('Kosong', 'Tidak ada data siswa untuk kelas tersebut.', 'info'); return; }
         let html = `<html><head><title>Cetak Kartu Login</title><style>body { font-family: 'Times New Roman', Times, serif; } .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 15px; } .card { border: 2px dashed #333; padding: 15px; border-radius: 8px; page-break-inside: avoid; } .kop { display: flex; align-items: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px; } .kop img { width: 50px; height: 50px; margin-right: 15px; } .kop h3 { margin: 0; font-size: 15px; text-transform: uppercase; } .kop p { margin: 0; font-size: 11px; } table { width: 100%; font-size: 14px; } td { padding: 4px 0; } @media print { .no-print { display: none; } }</style></head><body><div class="no-print" style="margin: 15px; text-align:right;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; background:#7e22ce; color:white; border:none; border-radius:5px; cursor:pointer;">Cetak Dokumen</button></div><div class="grid">`;
@@ -527,8 +568,10 @@ export default function Page() {
     };
 
     window.printDaftarHadir = function() {
-        const $ = window.jQuery; if(!$) return;
-        const examId = $('#adm-exam-hadir').val(); const kls = $('#adm-kls-hadir').val();
+        const examIdEl = document.getElementById('adm-exam-hadir');
+        const examId = examIdEl ? examIdEl.value : null; 
+        const klsEl = document.getElementById('adm-kls-hadir');
+        const kls = klsEl ? klsEl.value : 'ALL';
         if(!examId) { if(window.Swal) window.Swal.fire('Perhatian', 'Pilih Ujian terlebih dahulu.', 'warning'); return; }
         const exam = (window.gAdminData.exams || []).find(e => String(e.ExamID) === String(examId)); let usersToPrint = window.gAdminData.users || [];
         if (kls !== 'ALL') usersToPrint = usersToPrint.filter(u => u.Kelas === kls);
@@ -540,8 +583,10 @@ export default function Page() {
     };
 
     window.printBeritaAcara = function() {
-        const $ = window.jQuery; if(!$) return;
-        const examId = $('#adm-exam-ba').val(); const kls = $('#adm-kls-ba').val();
+        const examIdEl = document.getElementById('adm-exam-ba');
+        const examId = examIdEl ? examIdEl.value : null; 
+        const klsEl = document.getElementById('adm-kls-ba');
+        const kls = klsEl ? klsEl.value : 'ALL';
         if(!examId) { if(window.Swal) window.Swal.fire('Perhatian', 'Pilih Ujian terlebih dahulu.', 'warning'); return; }
         const exam = (window.gAdminData.exams || []).find(e => String(e.ExamID) === String(examId));
         let html = `<html><head><title>Berita Acara Ujian</title><style>body { font-family: 'Times New Roman', Times, serif; padding: 40px; line-height: 1.6; } .kop { display: flex; align-items: center; justify-content: center; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 30px; text-align: center; } .kop img { width: 80px; height: 80px; margin-right: 20px; position: absolute; left: 40px; } .kop h2 { margin: 0; font-size: 22px; text-transform: uppercase; } .kop p { margin: 5px 0 0; font-size: 14px; } h3 { text-align: center; text-decoration: underline; margin-bottom: 30px; } .content { font-size: 15px; text-align: justify; } .content p { margin-bottom: 15px; } .ttd-section { margin-top: 60px; width: 100%; } .ttd-section table { width: 100%; text-align: center; } @media print { .no-print { display: none; } }</style></head><body><div class="no-print" style="margin-bottom: 15px; text-align:right;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; background:#198754; color:white; border:none; border-radius:5px; cursor:pointer;">Cetak Dokumen</button></div><div class="kop"><img src="${window.LOGO_BARU}" alt="Logo"><div><h2>PANITIA PELAKSANAAN UJIAN CBT</h2><p>Aplikasi BELAJAR INOVASI</p></div></div><h3>BERITA ACARA PELAKSANAAN UJIAN</h3><div class="content"><p>Pada hari ini .................................. tanggal ........... bulan .............................. tahun .........................., telah diselenggarakan Ujian Berbasis Komputer (CBT) dengan rincian sebagai berikut:</p><table style="width: 100%; margin-left: 20px; margin-bottom: 15px;"><tr><td width="25%">Mata Pelajaran</td><td width="5%">:</td><td><strong>${exam.Mapel} - ${exam.Judul}</strong></td></tr><tr><td>Kelas / Ruang</td><td>:</td><td><strong>${kls === 'ALL' ? 'Semua Kelas' : kls}</strong></td></tr><tr><td>Waktu Pelaksanaan</td><td>:</td><td>Pukul ..................... s.d .....................</td></tr></table><p>Dengan jumlah peserta ujian sebagai berikut:</p><table style="width: 100%; margin-left: 20px; margin-bottom: 20px;"><tr><td width="25%">1. Jumlah Peserta Seharusnya</td><td width="5%">:</td><td>........... Orang</td></tr><tr><td>2. Jumlah Peserta Hadir</td><td>:</td><td>........... Orang</td></tr><tr><td>3. Jumlah Peserta Tidak Hadir</td><td>:</td><td>........... Orang</td></tr><tr><td valign="top">4. Catatan Selama Ujian</td><td valign="top">:</td><td style="border-bottom: 1px dotted #000; height: 30px;"></td></tr><tr><td></td><td></td><td style="border-bottom: 1px dotted #000; height: 30px;"></td></tr></table><p>Demikian Berita Acara ini dibuat dengan sesungguhnya untuk dapat dipergunakan sebagaimana mestinya.</p></div><div class="ttd-section"><table><tr><td width="50%"></td><td width="50%">....................................<br>Pengawas Ujian,</td></tr><tr><td height="80"></td><td></td></tr><tr><td></td><td><strong>( .................................................. )</strong></td></tr></table></div><script>window.onload = function() { window.print(); }<\/script></body></html>`;
@@ -764,10 +809,10 @@ export default function Page() {
             inp += `</tbody></table>`;
         } else if(q.Tipe==='Menjodohkan') {
             const lItems = JSON.parse(q.Options||"[]"); let rItems = []; try { rItems = [...JSON.parse(q.Key||"[]")].sort(() => Math.random() - 0.5); } catch(e){}
-            inp = `<div style="display:flex; justify-content:space-between; gap:20px; margin-top:15px;"><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${lItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${rItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="window.resetMatch(${i})">Reset Garis</button></div>`;
+            inp = `<div style="display:flex; justify-content:space-between; gap:20px; margin-top:15px;"><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${lItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${rItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div></div>`;
         } else if(q.Tipe.includes('PG')) {
             const opts = JSON.parse(q.Options||"[]");
-            opts.forEach(o => { inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`; });
+            opts.forEach(o => { inp += `<label style="display:flex; align-items:center; border:1px solid #e2e8f0; padding:15px; margin-bottom:10px; border-radius:6px; background:#fff; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.05);"><input type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" style="margin-right:15px; transform:scale(1.5);"><div style="flex-grow:1; margin:0;">${o}</div></label>`; });
         } else {
             inp = `<textarea style="width:100%; padding:15px; border:1px solid #e2e8f0; border-radius:6px; font-family:inherit; resize:vertical;" rows="5" placeholder="Ketik jawaban Anda di sini..."></textarea>`;
         }
@@ -804,7 +849,26 @@ export default function Page() {
         const form = $(`#form-${uid}`); 
         if (form.hasClass('hidden')) { 
             window.activeUid = uid; form.removeClass('hidden'); $(`#block-${uid}`).addClass('border-primary'); 
-            $(`#sn-${uid}`).summernote(window.snConfig); window.renderAnsFields(uid, $(`#type-${uid}`).val());
+            
+            // Inisialisasi Summernote dengan referensi tombol Math
+            const MathButton = function (context) {
+                const ui = $.summernote.ui;
+                const button = ui.button({
+                    contents: '<i class="fas fa-square-root-alt"></i> Rumus', tooltip: 'Tambahkan Rumus Matematika',
+                    click: function () {
+                        if(window.Swal) {
+                            window.Swal.fire({
+                                title: 'Editor Rumus (LaTeX)', html: `<div class="text-start small mb-2 text-muted">Ketik format LaTeX:</div><textarea id="swal-math-input" class="form-control font-monospace" rows="3"></textarea>`,
+                                showCancelButton: true, confirmButtonText: 'Sisipkan'
+                            }).then((result) => { if (result.isConfirmed) { const mathText = $('#swal-math-input').val(); if(mathText) context.invoke('editor.insertText', ` $$ ${mathText} $$ `); } });
+                        }
+                    }
+                });
+                return button.render();
+            };
+            const snConfig = { height: 180, toolbar: [['style', ['bold', 'italic', 'underline', 'clear']], ['para', ['ul', 'ol']], ['insert', ['picture', 'table', 'link', 'math']]], buttons: { math: MathButton } };
+            
+            $(`#sn-${uid}`).summernote(snConfig); window.renderAnsFields(uid, $(`#type-${uid}`).val());
         } else { 
             form.addClass('hidden'); $(`#block-${uid}`).removeClass('border-primary'); 
             $(`#sn-${uid}`).summernote('destroy'); $(`#ans-area-${uid} .summernote-opt`).each(function(){ $(this).summernote('destroy'); }); 
@@ -833,16 +897,39 @@ export default function Page() {
         } else if (type === 'Uraian') { 
             h = `<textarea class="form-control" name="essay_key" placeholder="Kata kunci penilaian (dipisah koma)">${keys.join(',')}</textarea>`; 
         } 
-        $(`#ans-area-${uid}`).html(h); $(`#ans-area-${uid} .summernote-opt`).summernote(window.snConfig); 
+        $(`#ans-area-${uid}`).html(h); 
+        
+        const MathButton = function (context) {
+            const ui = $.summernote.ui;
+            const button = ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', tooltip: 'Rumus', click: function () { if(window.Swal) window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((result) => { if (result.isConfirmed) { const mathText = $('#swal-math-input').val(); if(mathText) context.invoke('editor.insertText', ` $$ ${mathText} $$ `); } }); } });
+            return button.render();
+        };
+        const snConfig = { height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButton } };
+        $(`#ans-area-${uid} .summernote-opt`).summernote(snConfig); 
     };
 
     window.genOptRow = function(uid, type, val='', checked='') { return `<div class="d-flex align-items-start mb-2 ans-row gap-2"><div class="mt-2"><input type="${type}" name="k_${uid}" class="form-check-input" ${checked}></div><div class="flex-grow-1"><textarea class="summernote-opt">${val}</textarea></div><button type="button" class="btn btn-outline-danger mt-1" onclick="window.removeOptRow(this)">X</button></div>`; };
     window.genPGKKRow = function(q='', k='B') { return `<tr><td><textarea class="summernote-opt pgkk-q">${q}</textarea></td><td><select class="form-select pgkk-k"><option value="B" ${k=='B'?'selected':''}>Benar</option><option value="S" ${k=='S'?'selected':''}>Salah</option></select></td><td><button type="button" class="btn btn-danger btn-sm" onclick="window.jQuery(this).closest('tr').remove()">X</button></td></tr>`; };
     window.genMatchRow = function(l='', r='') { return `<tr><td><textarea class="summernote-opt match-l">${l}</textarea></td><td><textarea class="summernote-opt match-r">${r}</textarea></td><td><button type="button" class="btn btn-danger btn-sm" onclick="window.jQuery(this).closest('tr').remove()">X</button></td></tr>`; };
 
-    window.addOptRow = function(uid, t) { const $ = window.jQuery; if(!$) return; const el = $(window.genOptRow(uid, t)); $(`#opts-wrap-${uid}`).append(el); el.find('.summernote-opt').summernote(window.snConfig); };
-    window.addPGKKRowTo = function(uid) { const $ = window.jQuery; if(!$) return; const el = $(window.genPGKKRow()); $(`#pgkk-tbody-${uid}`).append(el); el.find('.summernote-opt').summernote(window.snConfig); };
-    window.addMatchRowTo = function(uid) { const $ = window.jQuery; if(!$) return; const el = $(window.genMatchRow()); $(`#match-tbody-${uid}`).append(el); el.find('.summernote-opt').summernote(window.snConfig); };
+    window.addOptRow = function(uid, t) { 
+        const $ = window.jQuery; if(!$) return; const el = $(window.genOptRow(uid, t)); $(`#opts-wrap-${uid}`).append(el); 
+        const MathButton = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', click: function () { if(window.Swal) window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((r) => { if (r.isConfirmed) { const txt = $('#swal-math-input').val(); if(txt) context.invoke('editor.insertText', ` $$ ${txt} $$ `); } }); } }).render(); };
+        el.find('.summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButton } }); 
+    };
+    
+    window.addPGKKRowTo = function(uid) { 
+        const $ = window.jQuery; if(!$) return; const el = $(window.genPGKKRow()); $(`#pgkk-tbody-${uid}`).append(el); 
+        const MathButton = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', click: function () { if(window.Swal) window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((r) => { if (r.isConfirmed) { const txt = $('#swal-math-input').val(); if(txt) context.invoke('editor.insertText', ` $$ ${txt} $$ `); } }); } }).render(); };
+        el.find('.summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButton } }); 
+    };
+    
+    window.addMatchRowTo = function(uid) { 
+        const $ = window.jQuery; if(!$) return; const el = $(window.genMatchRow()); $(`#match-tbody-${uid}`).append(el); 
+        const MathButton = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', click: function () { if(window.Swal) window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((r) => { if (r.isConfirmed) { const txt = $('#swal-math-input').val(); if(txt) context.invoke('editor.insertText', ` $$ ${txt} $$ `); } }); } }).render(); };
+        el.find('.summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButton } }); 
+    };
+
     window.removeOptRow = function(btn) { const $ = window.jQuery; if($) $(btn).closest('.ans-row').remove(); };
 
     window.saveQBlock = function(uid) {
@@ -988,7 +1075,7 @@ export default function Page() {
     };
 
     window.saveAnsLocal = function(qid, type, idx) {
-        const $= window.jQuery; if(!$) return;
+        const $ = window.jQuery; if(!$) return;
         let val; 
         if(type.includes('PG')) { if(type==='PGK') { val=[]; $(`input[name="ans-${qid}"]:checked`).each(function(){ val.push(decodeURIComponent($(this).val())) }); } else val = decodeURIComponent($(`input[name="ans-${qid}"]:checked`).val()); } 
         else if(type === 'PGKK') { val=[]; $(`#sl-${idx} tbody tr`).each(function(x){ val.push($(`input[name="ans-${qid}-${x}"]:checked`).val()||null) }); } 
@@ -1132,7 +1219,8 @@ export default function Page() {
             <div class="col-md-4"><input type="text" id="mon-search" class="form-control" placeholder="Cari..." onkeyup="window.filterTable('tbl-mon', this.value)"></div>
             <div class="col-md-3"><button class="btn btn-danger w-100 fw-bold" onclick="window.triggerResetMassal()"><i class="fas fa-recycle me-1"></i> Reset Semua Siswa</button></div>
             </div><div id="mon-area" class="bg-white p-3 rounded shadow-sm" style="min-height:200px">Silakan pilih ujian untuk memonitor progres secara Live.</div>`; 
-            $('#content-area').html(h); 
+            const area = document.getElementById('content-area');
+            if(area) area.innerHTML = h; 
         }).withFailureHandler(err => { window.showLoad(false); if(window.Swal) window.Swal.fire('Error', err.message, 'error'); }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas); 
     };
 
@@ -1180,27 +1268,39 @@ export default function Page() {
     window.filterTable = function(tid, q) { const $ = window.jQuery; if(!$) return; const f=q.toLowerCase();$(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); };
 
     // =================================================================
-    // Cek Session Saat Awal Render
+    // 5. PENGECEKAN SESI (AUTO-LOGIN) SETELAH RENDER HTML SIAP
     // =================================================================
-    const savedUser = localStorage.getItem('cbt_user');
-    if(savedUser) {
-        window.user = JSON.parse(savedUser);
-        setTimeout(() => {
+    const checkAutoLogin = () => {
+        const savedUser = localStorage.getItem('cbt_user');
+        if(savedUser) {
+            window.user = JSON.parse(savedUser);
             const logoEl = document.querySelector('#logo-container img');
-            if (logoEl) logoEl.src = window.user.LogoUrl || window.LOGO_BARU;
+            if (logoEl) logoEl.src = window.user.LogoUrl || LOGO_BARU;
+            
+            // Atasi Tumpang Tindih Manual
+            const authView = document.getElementById('view-auth');
+            const dashView = document.getElementById('view-dashboard');
+            if(authView) { authView.classList.add('hidden'); authView.style.display = 'none'; }
+            if(dashView) { dashView.classList.remove('hidden'); dashView.style.display = 'flex'; }
+            
             window.initDash();
             if(window.checkResumeExam) window.checkResumeExam();
-        }, 300);
-    } else {
-        setTimeout(() => {
+        } else {
+            // Tampilkan layar login jika belum login
             const authView = document.getElementById('view-auth');
-            if (authView) authView.style.display = 'flex';
-        }, 100);
-    }
+            const loader = document.getElementById('loader');
+            if(authView) { authView.classList.remove('hidden'); authView.style.display = 'flex'; }
+            if(loader) loader.classList.add('hidden');
+        }
+    };
+
+    // Panggil setelah 100ms agar DOM terdeteksi Next.js
+    setTimeout(checkAutoLogin, 100);
 
   }, [isMounted]);
 
-  if (!isMounted) return <div style={{ width: '100vw', height: '100vh', backgroundColor: '#f1f5f9' }} />;
+  // Loading Screen Murni agar tidak terjadi Hydration Mismatch
+  if (!isMounted) return <div style={{ width: '100vw', height: '100vh', backgroundColor: '#f8fafc' }}></div>;
 
   return (
     <>
@@ -1220,11 +1320,17 @@ export default function Page() {
 
       <div dangerouslySetInnerHTML={{ __html: `
         <style>
-          :root { --primary: #7e22ce; --secondary: #a855f7; --accent: #84cc16; --bg-body: #faf5ff; }
+          :root { 
+              --primary: #7e22ce; 
+              --secondary: #a855f7; 
+              --accent: #84cc16; 
+              --bg-body: #f8fafc; 
+          }
           body { font-family: 'Poppins', sans-serif; background-color: var(--bg-body); color: #1e293b; overflow-x: hidden; margin: 0; }
           body.exam-mode { overflow: hidden; user-select: none; }
           .hidden { display: none !important; }
           .q-content img, .opt-content img { max-width: 100% !important; height: auto !important; border-radius: 6px; margin: 5px 0; }
+          
           .text-primary { color: var(--primary) !important; }
           .bg-primary { background-color: var(--primary) !important; color: white !important; }
           .btn-primary { background-color: var(--primary) !important; border-color: var(--primary) !important; color: white !important; }
@@ -1244,7 +1350,7 @@ export default function Page() {
           .auth-card-split { display: flex; background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); max-width: 900px; width: 100%; overflow: hidden; z-index: 2; margin-bottom: 20px; min-height: 400px; }
           .auth-left { flex: 1; background: linear-gradient(135deg, rgba(126,34,206,1) 0%, rgba(132,204,22,1) 100%); color: white; padding: 40px; display: flex; flex-direction: column; justify-content: center; }
           .auth-right { flex: 1; padding: 40px; display: flex; flex-direction: column; justify-content: center; background: white; }
-          .auth-footer { text-align: center; color: rgba(255,255,255,0.9); font-size: 0.875rem; z-index: 3; width: 100%; }
+          .auth-footer { text-align: center; color: rgba(255,255,255,0.9); font-size: 0.875rem; z-index: 3; width: 100%; font-weight: 500;}
           @media (max-width: 768px) { .auth-card-split { flex-direction: column; } .auth-left { padding: 30px; text-align: center; } .auth-left ul li { justify-content: center; } }
           .auth-left h2 { font-weight: 700; margin-bottom: 15px; }
           .auth-left p { font-size: 14px; opacity: 0.9; margin-bottom: 20px; line-height: 1.6; }
@@ -1290,11 +1396,11 @@ export default function Page() {
           #content-area { flex: 1; }
         </style>
 
-        <div id="loader" class="loader hidden"><div class="spinner"></div></div>
+        <div id="loader" class="loader"><div class="spinner"></div></div>
         <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
         
-        <!-- LAYAR LOGIN -->
-        <div id="view-auth" class="auth-wrapper" style="display:none;">
+        <!-- LAYAR LOGIN SPLIT (DISEMBUNYIKAN DI AWAL) -->
+        <div id="view-auth" class="auth-wrapper hidden" style="display:none;">
             <div class="auth-card-split">
                 <div class="auth-left">
                     <h2>CBT Belajar Inovasi</h2>
@@ -1311,6 +1417,7 @@ export default function Page() {
                         <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
                         <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
                     </div>
+                    <!-- Form Native Submit -->
                     <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;">
                         <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
                         <div class="form-floating mb-4 position-relative">
@@ -1325,8 +1432,8 @@ export default function Page() {
             <div class="auth-footer">© 2026 BELAJAR INOVASI</div>
         </div>
 
-        <!-- LAYAR DASHBOARD -->
-        <div id="view-dashboard" class="hidden wrapper">
+        <!-- LAYAR DASHBOARD UTAMA -->
+        <div id="view-dashboard" class="hidden wrapper" style="display:none;">
             <nav id="sidebar">
                 <div class="sidebar-header d-flex align-items-center justify-content-between p-3 border-bottom border-secondary">
                     <div><h5 class="fw-bold mb-0 text-white">MENU UTAMA</h5><small class="text-white-50" id="user-role-disp"></small></div>
@@ -1368,7 +1475,7 @@ export default function Page() {
             </div>
         </div>
 
-        <div id="view-exam" class="hidden">
+        <div id="view-exam" class="hidden" style="display:none;">
             <div class="exam-header">
                 <div class="d-flex align-items-center">
                     <i class="fas fa-laptop-code me-2 fs-4 text-primary"></i>
@@ -1395,13 +1502,12 @@ export default function Page() {
             </div>
         </div>
 
-        <!-- MODAL LIST -->
         <div class="modal fade" id="modalExam" tabindex="-1">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <div class="modal-header bg-primary text-white"><h5 class="modal-title">Konfigurasi Ujian</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;">
+                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;" action="javascript:void(0);">
                             <input type="hidden" id="ex-id" name="examId">
                             <div class="mb-3"><label class="small fw-bold">Judul Ujian</label><input type="text" name="judul" id="ex-judul" class="form-control" required></div>
                             <div class="row g-3 mb-3">
