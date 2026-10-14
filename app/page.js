@@ -843,11 +843,11 @@ export default function Page() {
                   inp += `</tbody></table>`;
               } else if(q.Tipe==='Menjodohkan') {
                   const lItems = JSON.parse(q.Options||"[]"); const rItems = q.Extra || [];
-                  inp = `<div class="match-container" id="match-area-${i}"><input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH',${i})"><svg class="match-svg" id="svg-${i}"></svg><div class="match-col" id="col-l-${i}">${lItems.map((t,Idx)=>`<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div><div class="match-col" id="col-r-${i}">${rItems.map((t,Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="window.resetMatch(${i})">Reset Garis</button></div>`;
+                  inp = `<div class="match-container" id="match-area-${i}"><input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})"><svg class="match-svg" id="svg-${i}"></svg><div class="match-col" id="col-l-${i}">${lItems.map((t,Idx)=>`<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div><div class="match-col" id="col-r-${i}">${rItems.map((t,Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="window.resetMatch(${i})">Reset Garis</button></div>`;
               } else if(q.Tipe.includes('PG')) {
                   const opts = JSON.parse(q.Options||"[]");
-                  opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}',${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
-              } else inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="window.saveAnsLocal('${q.QID}', 'ESSAY',${i})"></textarea>`;
+                  opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
+              } else inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="window.saveAnsLocal('${q.QID}', 'ESSAY', ${i})"></textarea>`;
               c.append(`<div class="q-slide hidden" id="sl-${i}" data-qid="${q.QID}" data-type="${q.Tipe}"><div class="badge bg-primary mb-3">Soal No. ${q.Nomor||i+1}</div><div class="mb-4 q-content lead">${q.Pertanyaan}</div>${inp}</div>`);
               g.append(`<button id="nb-${i}" class="q-nav-btn ${i===0?'active-q':''}" onclick="window.jump(${i})">${i+1}</button>`);
           });
@@ -1013,7 +1013,7 @@ export default function Page() {
       };
 
       window.startMon = function(){ const id=$('#mon-sel').val(); if(id){ window.fetchMon(id); clearInterval(monitorInterval); monitorInterval=setInterval(()=>window.fetchMon(id),10000); } else $('#mon-area').empty(); };
-      window.fetchMon = function(id){ window.google.script.run.withSuccessHandler(r=>{ if(r.status==='error') { $('#mon-area').html(`<div class="alert alert-warning">${r.msg}</div>`); return; } let h=`<table id="tbl-mon" class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama</th><th>Progress</th><th>Status</th><th>Aksi</th></tr></thead><tbody>`; (r?.data || []).forEach(d=>{ const p=Math.round((d.terjawab/d.total)*100)||0; h+=`<tr data-uid="${d.id}" data-nama="${d.nama}"><td><div class="fw-bold">${d.nama}</div><small class="text-muted">${d.kelas}</small></td><td><div class="progress" style="height:20px"><div class="progress-bar bg-success" style="width:${p}\%">${d.terjawab}/${d.total}</div></div></td><td>${d.status==='Online'?'<span class="badge bg-success">ON</span>':'<span class="badge bg-secondary">OFF</span>'}</td><td><button class="btn btn-sm btn-outline-danger" onclick="window.triggerReset('${d.id}', '${d.nama}')">Reset User</button></td></tr>` }); $('#content-area').html(h+'</tbody></table>'); const cur=$('#mon-search').val(); if(cur) window.filterTable('tbl-mon', cur); }).withFailureHandler(err => console.log(err)).getLiveMonitoring(id, user.Role, user.Kelas); };
+      window.fetchMon = function(id){ window.google.script.run.withSuccessHandler(r=>{ if(r.status==='error') { $('#mon-area').html(`<div class="alert alert-warning">${r.msg}</div>`); return; } let h=`<table id="tbl-mon" class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama</th><th>Progress</th><th>Status</th><th>Aksi</th></tr></thead><tbody>`; (r?.data || []).forEach(d=>{ const p=Math.round((d.terjawab/d.total)*100)||0; h+=`<tr data-uid="${d.id}" data-nama="${d.nama}"><td><div class="fw-bold">${d.nama}</div><small class="text-muted">${d.kelas}</small></td><td><div class="progress" style="height:20px"><div class="progress-bar bg-success" style="width:${p}%">${d.terjawab}/${d.total}</div></div></td><td>${d.status==='Online'?'<span class="badge bg-success">ON</span>':'<span class="badge bg-secondary">OFF</span>'}</td><td><button class="btn btn-sm btn-outline-danger" onclick="window.triggerReset('${d.id}', '${d.nama}')">Reset User</button></td></tr>` }); $('#content-area').html(h+'</tbody></table>'); const cur=$('#mon-search').val(); if(cur) window.filterTable('tbl-mon', cur); }).withFailureHandler(err => console.log(err)).getLiveMonitoring(id, user.Role, user.Kelas); };
 
       window.triggerReset = function(sId, sName) { 
           const eId = $('#mon-sel').val(); if(!sId || !eId) return window.Swal.fire('Perhatian', 'Pilih ujian terlebih dahulu', 'warning'); 
@@ -1064,7 +1064,7 @@ export default function Page() {
 
   if (!isMounted) return null;
 
- return (
+  return (
     <>
       <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet" />
       <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
@@ -1156,13 +1156,12 @@ export default function Page() {
           .clickable-opt { cursor: pointer; transition: all 0.2s ease-in-out; margin-bottom: 0; }
           .clickable-opt:hover { background-color: #f1f5f9 !important; border-color: var(--secondary) !important; }
           #content-area { flex: 1; }
-          .icon-eye-login { cursor: pointer; z-index: 10; font-size: 1.2rem; }
         </style>
 
         <div id="loader" class="loader hidden"><div class="spinner"></div></div>
         <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
         
-        <!-- LAYAR LOGIN SPLIT (KIRI PENJELASAN, KANAN LOGIN, FOOTER DI BAWAH) -->
+        <!-- LAYAR LOGIN SPLIT KIRI-KANAN -->
         <div id="view-auth" class="auth-wrapper">
             <div class="auth-card-split">
                 <div class="auth-left">
@@ -1176,18 +1175,19 @@ export default function Page() {
                 </div>
                 <div class="auth-right">
                     <div class="text-center mb-4">
-                        <div id="logo-container"><img src="https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk" class="mb-3 rounded" width="100" alt="Logo"></div>
+                        <img src="https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk" class="mb-3 rounded" width="100" alt="Logo">
                         <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
                         <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
                     </div>
-                    <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;">
+                    <!-- Form tidak akan refresh halaman berkat onsubmit="return false;" -->
+                    <form id="frm-login" onsubmit="return false;">
                         <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
                         <div class="form-floating mb-4 position-relative">
                             <input type="password" id="p-login" class="form-control" placeholder="Pass" required>
                             <label>Password</label>
                             <i class="fas fa-eye position-absolute top-50 end-0 translate-middle-y me-3 text-muted" id="togglePassword" style="cursor: pointer; z-index: 100; pointer-events: auto;" onclick="window.togglePwd()"></i>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">MASUK SEKARANG</button>
+                        <button type="button" class="btn btn-primary w-100 py-2 fw-bold shadow-sm" onclick="window.handleLogin()">MASUK SEKARANG</button>
                     </form>
                 </div>
             </div>
@@ -1206,7 +1206,6 @@ export default function Page() {
                     <li><a onclick="window.loadPage('hasil-rekap')" class="nav-link"><i class="fas fa-chart-bar me-2"></i>Hasil Nilai</a></li>
                     <li><a onclick="window.loadPage('guru-monitoring')" class="nav-link"><i class="fas fa-tv me-2"></i>Monitoring</a></li>
                     <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link text-info"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
-                    <li><a onclick="window.handleResetCache()" class="nav-link text-warning"><i class="fas fa-bolt me-2"></i>Reset Cache</a></li>
                 </ul>
                 <ul class="list-unstyled components hidden" id="menu-guru">
                     <li><a onclick="window.loadPage('admin-home')" class="nav-link active"><i class="fas fa-home me-2"></i>Dashboard</a></li>
@@ -1269,7 +1268,7 @@ export default function Page() {
                 <div class="modal-content">
                     <div class="modal-header bg-primary text-white"><h5 class="modal-title">Konfigurasi Ujian</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;" action="javascript:void(0);">
+                        <form id="frm-exam" onsubmit="return false;">
                             <input type="hidden" id="ex-id" name="examId">
                             <div class="mb-3"><label class="small fw-bold">Judul Ujian</label><input type="text" name="judul" id="ex-judul" class="form-control" required></div>
                             <div class="row g-3 mb-3">
@@ -1283,9 +1282,7 @@ export default function Page() {
                             <div class="row g-3 mb-3">
                                 <div class="col-md-3">
                                     <label class="small fw-bold">Target Kelas</label>
-                                    <div id="kelas-container">
-                                        <input type="text" name="targetKelas" id="ex-kelas" class="form-control" placeholder="Contoh: 7A, 7B" required>
-                                    </div>
+                                    <div id="kelas-container"></div>
                                 </div>
                                 <div class="col-md-3"><label class="small fw-bold">Batas Pelanggaran</label><input type="number" name="maxViolations" id="ex-violations" class="form-control" value="3" required></div>
                                 <div class="col-md-3"><label class="small fw-bold">Limit Kerjakan</label><input type="number" name="limit" id="ex-limit" class="form-control" value="1"></div>
@@ -1295,7 +1292,7 @@ export default function Page() {
                                 <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="showStats" id="ex-showStats" value="Yes"><label class="small">Tampilkan Nilai</label></div>
                                 <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="randomQ" id="ex-randomQ" value="Yes"><label class="small">Acak Soal</label></div>
                             </div>
-                            <button type="submit" class="btn btn-primary w-100 fw-bold">SIMPAN JADWAL</button>
+                            <button type="button" class="btn btn-primary w-100 fw-bold" onclick="window.saveExam()">SIMPAN JADWAL</button>
                         </form>
                     </div>
                 </div>
@@ -1329,7 +1326,7 @@ export default function Page() {
                 <div class="modal-content">
                     <div class="modal-header bg-success text-white"><h5 class="modal-title">User Editor</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <form id="frm-user" onsubmit="event.preventDefault(); window.saveUser(event); return false;" action="javascript:void(0);">
+                        <form id="frm-user" onsubmit="return false;">
                             <input type="hidden" id="mu-id">
                             <input type="text" id="mu-nama" class="form-control mb-2" placeholder="Nama Lengkap" required>
                             <input type="text" id="mu-user" class="form-control mb-2" placeholder="Username" required>
@@ -1339,7 +1336,7 @@ export default function Page() {
                                 <div class="col"><input type="text" id="mu-kelas" class="form-control" placeholder="Kelas"></div>
                             </div>
                             <input type="text" id="mu-sekolah" class="form-control mb-2" placeholder="Sekolah (Opsional)">
-                            <button type="submit" class="btn btn-success w-100 mt-3">Simpan User</button>
+                            <button type="button" class="btn btn-success w-100 mt-3" onclick="window.saveUser()">Simpan User</button>
                         </form>
                     </div>
                 </div>
