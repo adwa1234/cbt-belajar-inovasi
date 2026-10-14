@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Script from "next/script";
+import { useEffect, useState } from "react";
 
 export default function Page() {
   const [isMounted, setIsMounted] = useState(false);
 
+  // Mencegah Vercel Crash (Hydration Mismatch)
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!isMounted) return;
+    if (!isMounted) return; // Tunggu HTML selesai dirender
     if (typeof window === "undefined" || window.appInitialized) return;
     window.appInitialized = true;
 
-    window.LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
+    const LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
+
+    // =================================================================
+    // 1. DEKLARASI STATE GLOBAL
+    // =================================================================
     window.examSubmitting = false;
     window.user = null;
     window.gData = {};
@@ -36,7 +41,9 @@ export default function Page() {
     let finalBeepOsc = null;
     let beepInterval = null;
 
-    // --- FUNGSI UI ---
+    // =================================================================
+    // 2. FUNGSI NATIVE & UI (ANTI MACET)
+    // =================================================================
     window.showLoad = function(show) {
         const loader = document.getElementById('loader');
         if (loader) {
@@ -49,6 +56,7 @@ export default function Page() {
         const p = document.getElementById('p-login');
         const icon = document.getElementById('togglePassword');
         if (!p || !icon) return;
+        
         if (p.type === 'password') {
             p.type = 'text';
             icon.classList.remove('fa-eye');
@@ -70,19 +78,27 @@ export default function Page() {
         else alert(title);
     };
 
-    // --- PROXY FETCH API ---
+    // =================================================================
+    // 3. PROXY API (PENGHUBUNG KE TURSO - DIJAMIN STABIL & LANJUT KE DASHBOARD)
+    // =================================================================
     window.google = {
       script: {
         get run() {
-          const runner = {
-            successFn: null,
-            failureFn: null,
-            withSuccessHandler: function (fn) { this.successFn = fn; return this; },
-            withFailureHandler: function (fn) { this.failureFn = fn; return this; }
-          };
-          return new Proxy(runner, {
+          const runner = { successFn: null, failureFn: null };
+          // PERBAIKAN: Mengembalikan Proxy dengan benar agar bisa di-chaining berlapis-lapis
+          const proxy = new Proxy(runner, {
             get: function (target, prop) {
-              if (prop in target) return target[prop];
+              if (prop === "withSuccessHandler") {
+                  return function (fn) { target.successFn = fn; return proxy; };
+              }
+              if (prop === "withFailureHandler") {
+                  return function (fn) { target.failureFn = fn; return proxy; };
+              }
+              // Mencegah error jika javascript memanggil properti internal
+              if (prop === 'then' || prop === 'catch' || prop === 'finally' || typeof prop === 'symbol') {
+                  return target[prop];
+              }
+
               return function (...args) {
                 fetch("/api/cbt", {
                   method: "POST",
@@ -103,11 +119,14 @@ export default function Page() {
               };
             }
           });
+          return proxy;
         }
       }
     };
 
-    // --- LOGIKA HALAMAN ---
+    // =================================================================
+    // 4. LOGIKA HALAMAN (LOGIN, LOGOUT, LOAD PAGE)
+    // =================================================================
     window.handleLogin = async function() {
         const u = document.getElementById('u-login').value;
         const p = document.getElementById('p-login').value;
@@ -127,18 +146,21 @@ export default function Page() {
                 body: JSON.stringify({ action: "loginUser", args: [u, p] })
             });
 
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(txt);
+            }
 
             const data = await res.json();
             window.showLoad(false);
 
             if (data.status === 'success') {
                 window.user = data.data;
-                window.user.LogoUrl = window.LOGO_BARU;
+                window.user.LogoUrl = LOGO_BARU;
                 localStorage.setItem('cbt_user', JSON.stringify(window.user));
                 
                 const logoEl = document.querySelector('#logo-container img');
-                if(logoEl) logoEl.src = window.LOGO_BARU;
+                if(logoEl) logoEl.src = LOGO_BARU;
                 
                 window.initDash();
             } else {
@@ -155,11 +177,13 @@ export default function Page() {
     window.initDash = function() {
         if(!window.user) return;
         
-        document.getElementById('view-auth').style.display = 'none'; 
+        const authView = document.getElementById('view-auth');
         const dashView = document.getElementById('view-dashboard');
+        
+        if(authView) authView.style.display = 'none'; 
         if(dashView) {
             dashView.classList.remove('hidden');
-            dashView.style.display = 'flex'; // Paksa tampil
+            dashView.style.display = 'flex';
         }
         
         const uNameDisp = document.getElementById('u-name-disp');
@@ -342,7 +366,7 @@ export default function Page() {
                     h += `</tbody></table></div>`;
                 }
             }
-            if($) area.html(h);
+            area.html(h);
         } catch (err) {
             console.error("Render Content Error: ", err);
             const $ = window.jQuery;
@@ -1152,27 +1176,8 @@ export default function Page() {
 
     window.filterTable = function(tid, q) { const $ = window.jQuery; if(!$) return; const f=q.toLowerCase();$(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); };
 
-    // ==========================================
-    // 5. PENGECEKAN SESI (AUTO-LOGIN)
-    // ==========================================
-    const checkAutoLogin = () => {
-        const savedUser = localStorage.getItem('cbt_user');
-        if(savedUser) {
-            window.user = JSON.parse(savedUser);
-            const logoEl = document.querySelector('#logo-container img');
-            if (logoEl) logoEl.src = window.user.LogoUrl || LOGO_BARU;
-            window.initDash();
-            if(window.checkResumeExam) window.checkResumeExam();
-        } else {
-            window.showLoad(false);
-        }
-    };
-
-    checkAutoLogin();
-
   }, [isMounted]);
 
-  // Hindari Hydration Mismatch
   if (!isMounted) return <div style={{ width: '100vw', height: '100vh', backgroundColor: '#f1f5f9' }} />;
 
   return (
@@ -1199,7 +1204,7 @@ export default function Page() {
               --accent: #84cc16; 
               --bg-body: #faf5ff; 
           }
-          body { font-family: 'Poppins', sans-serif; background-color: var(--bg-body); color: #1e293b; overflow-x: hidden; }
+          body { font-family: 'Poppins', sans-serif; background-color: var(--bg-body); color: #1e293b; overflow-x: hidden; margin: 0; }
           body.exam-mode { overflow: hidden; user-select: none; }
           .hidden { display: none !important; }
           .q-content img, .opt-content img { max-width: 100% !important; height: auto !important; border-radius: 6px; margin: 5px 0; }
@@ -1223,7 +1228,7 @@ export default function Page() {
           .auth-card-split { display: flex; background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); max-width: 900px; width: 100%; overflow: hidden; z-index: 2; margin-bottom: 20px; min-height: 400px; }
           .auth-left { flex: 1; background: linear-gradient(135deg, rgba(126,34,206,1) 0%, rgba(132,204,22,1) 100%); color: white; padding: 40px; display: flex; flex-direction: column; justify-content: center; }
           .auth-right { flex: 1; padding: 40px; display: flex; flex-direction: column; justify-content: center; background: white; }
-          .auth-footer { text-align: center; color: rgba(255,255,255,0.9); font-size: 0.875rem; z-index: 3; width: 100%; font-weight: 500; }
+          .auth-footer { text-align: center; color: rgba(255,255,255,0.9); font-size: 0.875rem; z-index: 3; width: 100%; }
           @media (max-width: 768px) { .auth-card-split { flex-direction: column; } .auth-left { padding: 30px; text-align: center; } .auth-left ul li { justify-content: center; } }
           .auth-left h2 { font-weight: 700; margin-bottom: 15px; }
           .auth-left p { font-size: 14px; opacity: 0.9; margin-bottom: 20px; line-height: 1.6; }
@@ -1290,7 +1295,7 @@ export default function Page() {
                         <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
                         <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
                     </div>
-                    <!-- Form Native Submit -->
+                    <!-- Form Native Prevent Default -->
                     <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;">
                         <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
                         <div class="form-floating mb-4 position-relative">
@@ -1380,7 +1385,7 @@ export default function Page() {
                 <div class="modal-content">
                     <div class="modal-header bg-primary text-white"><h5 class="modal-title">Konfigurasi Ujian</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;">
+                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;" action="javascript:void(0);">
                             <input type="hidden" id="ex-id" name="examId">
                             <div class="mb-3"><label class="small fw-bold">Judul Ujian</label><input type="text" name="judul" id="ex-judul" class="form-control" required></div>
                             <div class="row g-3 mb-3">
