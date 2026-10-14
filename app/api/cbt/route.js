@@ -1,3 +1,4 @@
+// app/api/cbt/route.js
 import { NextResponse } from "next/server";
 import { turso } from "@/lib/turso"; 
 
@@ -13,20 +14,14 @@ export async function POST(req) {
       const [username, password] = args;
       
       try {
-        // [AUTO-SETUP] 1. Buat tabel Users jika belum ada
+        // [AUTO-SETUP] Buat tabel Users jika belum ada
         await turso.execute(`
           CREATE TABLE IF NOT EXISTS Users (
-            ID TEXT PRIMARY KEY,
-            Nama TEXT,
-            Username TEXT UNIQUE,
-            Password TEXT,
-            Role TEXT,
-            Sekolah TEXT,
-            Kelas TEXT
+            ID TEXT PRIMARY KEY, Nama TEXT, Username TEXT UNIQUE, Password TEXT, Role TEXT, Sekolah TEXT, Kelas TEXT
           )
         `);
 
-        // [AUTO-SETUP] 2. Buat akun Admin default jika database masih kosong
+        // [AUTO-SETUP] Buat akun Admin default jika tabel masih kosong
         const checkAdmin = await turso.execute({
           sql: "SELECT * FROM Users WHERE Username = ?",
           args: ["admin"]
@@ -39,7 +34,7 @@ export async function POST(req) {
            });
         }
 
-        // Proses Login
+        // Eksekusi Pengecekan Login
         const res = await turso.execute({
           sql: "SELECT * FROM Users WHERE Username = ? AND Password = ?",
           args: [username, password]
@@ -58,7 +53,7 @@ export async function POST(req) {
       } catch (dbError) {
         return NextResponse.json({ 
           status: "error", 
-          msg: "Gagal membaca Database: " + dbError.message 
+          msg: "Gagal membaca Database Turso: " + dbError.message 
         });
       }
     }
