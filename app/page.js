@@ -1227,15 +1227,15 @@ export default function Page() {
               if(q.Tipe==='PGKK') {
                   const opts = JSON.parse(q.Options||"[]");
                   inp = `<table class="table table-bordered tbl-pgkk mt-3 bg-white"><thead><tr class="table-light"><th>PERNYATAAN</th><th width="15%">BENAR</th><th width="15%">SALAH</th></tr></thead><tbody>`;
-                  opts.forEach((o,x)=> inp+=`<tr><td><div class="opt-content">${o}</div></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="B" onchange="saveAnsLocal('${q.QID}', 'PGKK',${i})"></label></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="S" onchange="saveAnsLocal('${q.QID}', 'PGKK',${i})"></label></td></tr>`);
+                  opts.forEach((o,x)=> inp+=`<tr><td><div class="opt-content">${o}</div></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="B" onchange="saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="S" onchange="saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td></tr>`);
                   inp += `</tbody></table>`;
               } else if(q.Tipe==='Menjodohkan') {
                   const lItems = JSON.parse(q.Options||"[]"); const rItems = q.Extra || [];
-                  inp = `<div class="match-container" id="match-area-${i}"><input type="hidden" id="ans-in-${i}" onchange="saveAnsLocal('${q.QID}', 'MATCH',${i})"><svg class="match-svg" id="svg-${i}"></svg><div class="match-col" id="col-l-${i}">${lItems.map((t,Idx)=>`<div class="match-item match-left" data-idx="${Idx}" onclick="matchClick(${i}, 'l', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div><div class="match-col" id="col-r-${i}">${rItems.map((t,Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="matchClick(${i}, 'r', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="resetMatch(${i})">Reset Garis</button></div>`;
+                  inp = `<div class="match-container" id="match-area-${i}"><input type="hidden" id="ans-in-${i}" onchange="saveAnsLocal('${q.QID}', 'MATCH', ${i})"><svg class="match-svg" id="svg-${i}"></svg><div class="match-col" id="col-l-${i}">${lItems.map((t,Idx)=>`<div class="match-item match-left" data-idx="${Idx}" onclick="matchClick(${i}, 'l',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div><div class="match-col" id="col-r-${i}">${rItems.map((t,Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="matchClick(${i}, 'r',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="resetMatch(${i})">Reset Garis</button></div>`;
               } else if(q.Tipe.includes('PG')) {
                   const opts = JSON.parse(q.Options||"[]");
-                  opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="saveAnsLocal('${q.QID}', '${q.Tipe}',${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
-              } else inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="saveAnsLocal('${q.QID}', 'ESSAY',${i})"></textarea>`;
+                  opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
+              } else inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="saveAnsLocal('${q.QID}', 'ESSAY', ${i})"></textarea>`;
               c.append(`<div class="q-slide hidden" id="sl-${i}" data-qid="${q.QID}" data-type="${q.Tipe}"><div class="badge bg-primary mb-3">Soal No. ${q.Nomor||i+1}</div><div class="mb-4 q-content lead">${q.Pertanyaan}</div>${inp}</div>`);
               g.append(`<button id="nb-${i}" class="q-nav-btn ${i===0?'active-q':''}" onclick="jump(${i})">${i+1}</button>`);
           });
@@ -1295,7 +1295,7 @@ export default function Page() {
       }
 
       function markAns(i) { $(`#nb-${i}`).addClass('answered'); }
-      function jump(i) { currentQIdx = i; $('.q-slide').addClass('hidden'); $(`#sl-${i}`).removeClass('hidden'); $('.q-nav-btn').removeClass('active-q'); $(`#nb-${i}`).addClass('active-q'); if($(`#sl-${i}`).data('type')==='Menjodohkan') setTimeout(()=>drawLines(i), 50); applyMathJax(); }
+      function jump(i) { currentQIdx = i; $('.q-slide').addClass('hidden');$(`#sl-${i}`).removeClass('hidden'); $('.q-nav-btn').removeClass('active-q');$(`#nb-${i}`).addClass('active-q'); if($(`#sl-${i}`).data('type')==='Menjodohkan') setTimeout(()=>drawLines(i), 50); applyMathJax(); }
       function navSlide(dir) { let next = currentQIdx + dir; if(next >= 0 && next < totalQ) jump(next); }
 
       function submitExamButton(force = false) {
@@ -1334,7 +1334,7 @@ export default function Page() {
           let ans = [];
           try {
               $('.q-slide').each(function(idx) {
-                  const qid = $(this).data('qid'); const t = $(this).data('type'); let v = null;
+                  const qid = $(this).data('qid'); const t =$(this).data('type'); let v = null;
                   if (t.includes('PG') && t !== 'PGKK') {
                       if (t === 'PGK') { v = []; $(this).find('input:checked').each(function() { v.push(decodeURIComponent($(this).val())) }); }
                       else { const checked = $(this).find('input:checked').val(); if(checked) v = decodeURIComponent(checked); }
@@ -1391,7 +1391,7 @@ export default function Page() {
       }
 
       function startMon(){ const id=$('#mon-sel').val(); if(id){ fetchMon(id); clearInterval(monitorInterval); monitorInterval=setInterval(()=>fetchMon(id),10000); } else $('#mon-area').empty(); }
-      function fetchMon(id){ window.google.script.run.withSuccessHandler(r=>{ if(r.status==='error') { $('#mon-area').html(`<div class="alert alert-warning">${r.msg}</div>`); return; } let h=`<table id="tbl-mon" class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama</th><th>Progress</th><th>Status</th><th>Aksi</th></tr></thead><tbody>`; r.data.forEach(d=>{ const p=Math.round((d.terjawab/d.total)*100)||0; h+=`<tr data-uid="${d.id}" data-nama="${d.nama}"><td><div class="fw-bold">${d.nama}</div><small class="text-muted">${d.kelas}</small></td><td><div class="progress" style="height:20px"><div class="progress-bar bg-success" style="width:${p}\%">${d.terjawab}/${d.total}</div></div></td><td>${d.status==='Online'?'<span class="badge bg-success">ON</span>':'<span class="badge bg-secondary">OFF</span>'}</td><td><button class="btn btn-sm btn-outline-danger" onclick="triggerReset('${d.id}', '${d.nama}')">Reset User</button></td></tr>` }); $('#content-area').html(h+'</tbody></table>'); const cur=$('#mon-search').val(); if(cur) filterTable('tbl-mon', cur); }).withFailureHandler(err => console.log(err)).getLiveMonitoring(id, user.Role, user.Kelas); }
+      function fetchMon(id){ window.google.script.run.withSuccessHandler(r=>{ if(r.status==='error') { $('#mon-area').html(`<div class="alert alert-warning">${r.msg}</div>`); return; } let h=`<table id="tbl-mon" class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama</th><th>Progress</th><th>Status</th><th>Aksi</th></tr></thead><tbody>`; r.data.forEach(d=>{ const p=Math.round((d.terjawab/d.total)*100)||0; h+=`<tr data-uid="${d.id}" data-nama="${d.nama}"><td><div class="fw-bold">${d.nama}</div><small class="text-muted">${d.kelas}</small></td><td><div class="progress" style="height:20px"><div class="progress-bar bg-success" style="width:${p}%">${d.terjawab}/${d.total}</div></div></td><td>${d.status==='Online'?'<span class="badge bg-success">ON</span>':'<span class="badge bg-secondary">OFF</span>'}</td><td><button class="btn btn-sm btn-outline-danger" onclick="triggerReset('${d.id}', '${d.nama}')">Reset User</button></td></tr>` }); $('#content-area').html(h+'</tbody></table>'); const cur=$('#mon-search').val(); if(cur) filterTable('tbl-mon', cur); }).withFailureHandler(err => console.log(err)).getLiveMonitoring(id, user.Role, user.Kelas); }
 
       function triggerReset(sId, sName) { 
           const eId = $('#mon-sel').val(); if(!sId || !eId) return window.Swal.fire('Perhatian', 'Pilih ujian terlebih dahulu', 'warning'); 
@@ -1425,7 +1425,7 @@ export default function Page() {
           })
       }
 
-      function filterTable(tid, q) { const f=q.toLowerCase(); $(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase(); $(this).toggle(t.indexOf(f)>-1); }); }
+      function filterTable(tid, q) { const f=q.toLowerCase(); $(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); }
 
       // ==========================================
       // BIND FUNGSI KE WINDOW UNTUK EVENT HANDLER HTML
@@ -1624,4 +1624,175 @@ export default function Page() {
                     <li><a onclick="window.loadPage('hasil-rekap')" class="nav-link"><i class="fas fa-chart-bar me-2"></i>Hasil Nilai</a></li>
                     <li><a onclick="window.loadPage('guru-monitoring')" class="nav-link"><i class="fas fa-tv me-2"></i>Monitoring</a></li>
                     <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link text-info"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
-                    <li><a onclick="window.handleResetCache()" class="nav
+                    <li><a onclick="window.handleResetCache()" class="nav-link text-warning"><i class="fas fa-bolt me-2"></i>Reset Cache</a></li>
+                </ul>
+                <ul class="list-unstyled components hidden" id="menu-guru">
+                    <li><a onclick="window.loadPage('admin-home')" class="nav-link active"><i class="fas fa-home me-2"></i>Dashboard</a></li>
+                    <li><a onclick="window.loadPage('admin-users')" class="nav-link"><i class="fas fa-users me-2"></i>Data Peserta</a></li>
+                    <li><a onclick="window.loadPage('admin-ujian')" class="nav-link"><i class="fas fa-file-alt me-2"></i>Bank Soal</a></li>
+                    <li><a onclick="window.loadPage('hasil-rekap')" class="nav-link"><i class="fas fa-poll me-2"></i>Hasil Nilai</a></li>
+                    <li><a onclick="window.loadPage('guru-monitoring')" class="nav-link"><i class="fas fa-desktop me-2"></i>Live Monitor</a></li>
+                    <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link text-info"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
+                </ul>
+                <ul class="list-unstyled components hidden" id="menu-siswa">
+                    <li><a onclick="window.loadPage('siswa-home')" class="nav-link active"><i class="fas fa-pencil-alt me-2"></i>Ujian Saya</a></li>
+                </ul>
+                <div class="p-3 mt-auto border-top border-secondary position-absolute bottom-0 w-100">
+                    <div class="mb-3 text-white small"><i class="fas fa-user-circle me-1"></i> <span id="u-name-disp" class="fw-bold">User</span></div>
+                    <button onclick="window.handleLogout()" class="btn btn-danger btn-sm w-100">LOGOUT</button>
+                </div>
+            </nav>
+            <div id="content">
+                <nav class="navbar navbar-light bg-white rounded shadow-sm mb-4 p-2 d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <button id="menuToggle" class="btn btn-light me-2 border" onclick="window.toggleSidebar()"><i class="fas fa-bars"></i></button>
+                        <span class="navbar-brand mb-0 h1 fw-bold fs-5" id="page-title" style="color: var(--primary)">DASHBOARD</span>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm rounded-pill px-3" onclick="window.appRefresh()"><i class="fas fa-sync-alt"></i> Refresh</button>
+                </nav>
+                <div id="content-area"></div>
+                <footer class="mt-4 text-center text-muted small pb-3 border-top pt-3">© 2026 MIN 1 MANGGARAI TIMUR Kaltim </footer>
+            </div>
+        </div>
+
+        <div id="view-exam" class="hidden">
+            <div class="exam-header">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-laptop-code me-2 fs-4" style="color: var(--primary)"></i>
+                    <div class="d-none d-md-block"><h6 class="fw-bold m-0" id="do-exam-title">Judul Ujian</h6></div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-primary me-2 shadow-sm" onclick="window.refreshUjianSiswa()"><i class="fas fa-sync-alt me-1"></i>Refresh Soal</button>
+                    <div class="badge bg-dark fs-6 p-2 font-monospace"><i class="fas fa-clock me-1"></i><span id="timer-disp">00:00</span></div>
+                </div>
+            </div>
+            <div class="exam-container-split">
+                <div class="q-main-area">
+                    <div id="q-slides-container"></div>
+                    <div class="d-flex justify-content-between mt-4 pt-3 border-top">
+                        <button class="btn btn-outline-secondary px-3" id="btn-prev" onclick="window.navSlide(-1)"><i class="fas fa-chevron-left"></i> Prev</button>
+                        <button class="btn btn-primary px-3" id="btn-next" onclick="window.navSlide(1)" style="background-color: var(--primary); border: none;">Next <i class="fas fa-chevron-right"></i></button>
+                        <button class="btn btn-success px-4" id="btn-finish" onclick="window.submitExamButton(false)"><i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN</button>
+                    </div>
+                </div>
+                <div class="q-nav-area shadow-sm">
+                    <h6 class="fw-bold border-bottom pb-2 mb-2 small text-muted">NAVIGASI SOAL</h6>
+                    <div id="nav-grid" class="q-grid"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalExam" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header text-white" style="background-color: var(--primary);"><h5 class="modal-title">Konfigurasi Ujian</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;" action="javascript:void(0);">
+                            <input type="hidden" id="ex-id" name="examId">
+                            <div class="mb-3"><label class="small fw-bold">Judul Ujian</label><input type="text" name="judul" id="ex-judul" class="form-control" required></div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6"><label class="small fw-bold">Mata Pelajaran</label><input type="text" name="mapel" id="ex-mapel" class="form-control" required></div>
+                                <div class="col-md-6"><label class="small fw-bold">Durasi (Menit)</label><input type="number" name="durasi" id="ex-durasi" class="form-control" required></div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6"><label class="small fw-bold">Waktu Mulai</label><input type="datetime-local" name="start" id="ex-start" class="form-control" required></div>
+                                <div class="col-md-6"><label class="small fw-bold">Waktu Selesai</label><input type="datetime-local" name="end" id="ex-end" class="form-control" required></div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-3">
+                                    <label class="small fw-bold">Target Kelas</label>
+                                    <div id="kelas-container">
+                                        <input type="text" name="targetKelas" id="ex-kelas" class="form-control" placeholder="Contoh: 7A, 7B" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-3"><label class="small fw-bold">Batas Pelanggaran</label><input type="number" name="maxViolations" id="ex-violations" class="form-control" value="3" required></div>
+                                <div class="col-md-3"><label class="small fw-bold">Limit Kerjakan</label><input type="number" name="limit" id="ex-limit" class="form-control" value="1"></div>
+                                <div class="col-md-3"><label class="small fw-bold">Token (Opsional)</label><input type="text" name="token" id="ex-token" class="form-control"></div>
+                            </div>
+                            <div class="d-flex gap-4 mb-3">
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="showStats" id="ex-showStats" value="Yes"><label class="small">Tampilkan Nilai</label></div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="randomQ" id="ex-randomQ" value="Yes"><label class="small">Acak Soal</label></div>
+                            </div>
+                            <button type="submit" class="btn w-100 fw-bold text-white" style="background-color: var(--primary);">SIMPAN JADWAL</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalQ" tabindex="-1">
+            <div class="modal-dialog modal-fullscreen">
+                <div class="modal-content bg-light">
+                    <div class="modal-header bg-white shadow-sm">
+                        <h5 class="modal-title fw-bold" style="color: var(--primary)">Editor Soal</h5>
+                        <button class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="container" style="max-width:900px">
+                            <div class="alert alert-info small mb-3">
+                                <b>Tips Format Persamaan/LaTeX:</b> Anda bisa menggunakan tombol <b>Rumus</b> di editor untuk memasukkan persamaan matematika.
+                            </div>
+                            <div id="q-list-container"></div>
+                            <div class="text-center mt-5 mb-5">
+                                <button class="btn btn-lg btn-success rounded-pill px-5 shadow" onclick="window.addNewQuestionBlock()"><i class="fas fa-plus-circle me-2"></i> TAMBAH SOAL</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalUser" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white"><h5 class="modal-title">User Editor</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <form id="frm-user" onsubmit="event.preventDefault(); window.saveUser(); return false;" action="javascript:void(0);">
+                            <input type="hidden" id="mu-id">
+                            <input type="text" id="mu-nama" class="form-control mb-2" placeholder="Nama Lengkap" required>
+                            <input type="text" id="mu-user" class="form-control mb-2" placeholder="Username" required>
+                            <input type="text" id="mu-pass" class="form-control mb-2" placeholder="Password" required>
+                            <div class="row g-2 mb-2">
+                                <div class="col"><select id="mu-role" class="form-select"><option value="siswa">Siswa</option><option value="guru">Guru</option><option value="admin">Admin</option></select></div>
+                                <div class="col"><input type="text" id="mu-kelas" class="form-control" placeholder="Kelas"></div>
+                            </div>
+                            <input type="text" id="mu-sekolah" class="form-control mb-2" placeholder="Sekolah (Opsional)">
+                            <button type="submit" class="btn btn-success w-100 mt-3">Simpan User</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalKoreksi" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-info text-white"><h5 class="modal-title fw-bold"><i class="fas fa-edit me-2"></i>Koreksi Jawaban Siswa</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body bg-light" id="kor-body"></div>
+                    <div class="modal-footer bg-white border-top">
+                        <button class="btn btn-secondary px-4" data-bs-dismiss="modal">Tutup</button>
+                        <button class="btn btn-success px-4 shadow-sm" id="btn-save-kor" onclick="window.saveKoreksi()">Simpan Perubahan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalKatrol" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning"><h5 class="modal-title">Katrol Nilai Massal</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Tambahkan Nilai (+)</label>
+                            <input type="number" id="katrol-value" class="form-control form-control-lg text-center" value="0">
+                            <small class="text-muted mt-2 d-block">Nilai ini akan ditambahkan ke semua siswa yang sedang tampil di tabel filter saat ini. Harap filter dengan benar sebelum mengeksekusi.</small>
+                        </div>
+                        <button class="btn w-100 fw-bold text-white" style="background-color: var(--primary);" onclick="window.applyKatrolMassal()">Terapkan Katrol Sekarang</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      ` }} />
+    </>
+  );
+}
