@@ -22,7 +22,7 @@ export default function Page() {
       const LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
 
       // ==========================================
-      // PROXY API: PENGGANTI GOOGLE.SCRIPT.RUN (ANTI-MACET & SINKRON TURSO)
+      // PROXY API: PENGGANTI GOOGLE.SCRIPT.RUN (ANTI-MACET)
       // ==========================================
       window.google = {
         script: {
@@ -35,14 +35,12 @@ export default function Page() {
                 return function (fn) { target.failureFn = fn; return new Proxy(target, this); }.bind(this);
               }
               return function (...args) {
-                // Eksekusi Fetch ke Backend Vercel
                 fetch("/api/cbt", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ action: prop, args: args }),
                 })
                   .then(async (r) => {
-                     // Tangkap HTTP Error agar tidak macet loading
                      if (!r.ok) {
                          const txt = await r.text();
                          throw new Error(`Server Error (${r.status}): ${txt}`);
@@ -54,10 +52,11 @@ export default function Page() {
                   })
                   .catch((err) => { 
                       console.error("API Fetch Error:", err);
-                      // Matikan loading jika gagal
-                      window.showLoad(false);
+                      // Memaksa loading berhenti jika error agar tidak macet
+                      if (window.showLoad) window.showLoad(false); 
+                      
                       if (target.failureFn) target.failureFn(err); 
-                      else window.Swal.fire("Koneksi Gagal", "Terjadi kesalahan saat menghubungi database Turso: " + err.message, "error");
+                      else window.Swal.fire("Koneksi Gagal", err.message, "error");
                   });
               };
             },
@@ -83,7 +82,7 @@ export default function Page() {
       let violationCount = 0;
       let isExamFinished = false;
       let violationLock = false;
-      
+
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       let finalBeepOsc = null;
       let beepInterval = null;
@@ -174,23 +173,36 @@ export default function Page() {
       function showLoad(s) { s ? $('#loader').removeClass('hidden') : $('#loader').addClass('hidden'); }
       function toast(icon, title) { window.Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 3000}).fire({icon: icon, title: title}); }
 
-      function handleLogin() {
-          window.showLoad(true);
-          window.google.script.run.withSuccessHandler(res => {
-              window.showLoad(false);
-              if(res.status === 'success') {
-                  user = res.data; user.LogoUrl = LOGO_BARU; 
-                  localStorage.setItem('cbt_user', JSON.stringify(user));
-                  $('#logo-container img').attr('src', LOGO_BARU);
-                  window.initDash();
-              } else {
-                  window.Swal.fire('Gagal', res.msg, 'error');
+      // ==========================================
+      // FUNGSI LOGIN (SUDAH DIPERBAIKI ANTI MACET)
+      // ==========================================
+      window.handleLogin = function() {
+          try {
+              if (!window.Swal || !window.jQuery) {
+                  alert('Sistem sedang memuat komponen, mohon tunggu sebentar...');
+                  return;
               }
-          }).withFailureHandler(err => {
-              window.showLoad(false); 
-              window.Swal.fire('Error', 'Koneksi ke server gagal. Cek koneksi Turso: ' + err.message, 'error');
-          }).loginUser($('#u-login').val(), $('#p-login').val());
-      }
+              window.showLoad(true);
+              window.google.script.run.withSuccessHandler(res => {
+                  window.showLoad(false);
+                  if(res.status === 'success') {
+                      user = res.data; 
+                      user.LogoUrl = LOGO_BARU; 
+                      localStorage.setItem('cbt_user', JSON.stringify(user));
+                      $('#logo-container img').attr('src', LOGO_BARU);
+                      window.initDash();
+                  } else {
+                      window.Swal.fire('Gagal Login', res.msg, 'error');
+                  }
+              }).withFailureHandler(err => {
+                  window.showLoad(false); 
+                  window.Swal.fire('Error', 'Koneksi ke server gagal: ' + err.message, 'error');
+              }).loginUser($('#u-login').val(), $('#p-login').val());
+          } catch(e) {
+              window.showLoad(false);
+              console.error(e);
+          }
+      };
 
       function handleLogout() {
           window.Swal.fire({ title: 'Logout?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya', cancelButtonText: 'Batal' }).then((r) => {
@@ -199,7 +211,8 @@ export default function Page() {
                   localStorage.removeItem('cbt_user'); localStorage.removeItem('cbt_active_exam'); user = null;
                   clearInterval(timerInt); clearInterval(monitorInterval); clearInterval(autosaveInterval); activeExamId = null;
                   $('#view-dashboard').addClass('hidden'); $('#view-exam').addClass('hidden'); $('body').removeClass('exam-mode');
-                  $('#u-login').val(''); $('#p-login').val(''); $('#view-auth').css('display', 'flex'); 
+                  $('#u-login').val(''); $('#p-login').val(''); 
+                  $('#view-auth').css('display', 'flex'); // Mengembalikan ke layar login flex
                   $('#sidebar').removeClass('active'); $('#sidebar-overlay').removeClass('active');
               }
           });
@@ -1124,23 +1137,7 @@ export default function Page() {
       // ==========================================
       window.playBeep = playBeep; window.stopContinuousBeep = stopContinuousBeep; window.applyMathJax = applyMathJax;
       window.checkResumeExam = checkResumeExam; window.toggleSidebar = toggleSidebar; window.showLoad = showLoad; window.toast = toast;
-      
-      // ANTI-MACET: Handle Login
-      window.handleLogin = function() {
-          try {
-              if (!window.Swal || !window.jQuery) {
-                  alert('Sistem sedang memuat komponen penting, mohon tunggu...');
-                  return;
-              }
-              handleLogin();
-          } catch (err) {
-              console.error(err);
-              alert("Terjadi kesalahan sistem internal: " + err.message);
-              window.showLoad(false);
-          }
-      };
-      
-      window.handleLogout = handleLogout; window.initDash = initDash; window.appRefresh = appRefresh;
+      window.handleLogin = handleLogin; window.handleLogout = handleLogout; window.initDash = initDash; window.appRefresh = appRefresh;
       window.loadPage = loadPage; window.exportToExcel = exportToExcel; window.generateUserExcelTemplate = generateUserExcelTemplate;
       window.handleUploadUsersExcel = handleUploadUsersExcel; window.toggleAllCb = toggleAllCb; window.checkBulkDelete = checkBulkDelete;
       window.bulkDeleteUsers = bulkDeleteUsers; window.bulkDeleteRekap = bulkDeleteRekap; window.renderUsers = renderUsers;
@@ -1231,10 +1228,17 @@ export default function Page() {
           .badge.bg-primary { background-color: var(--primary) !important; }
           .badge.bg-success { background-color: var(--accent) !important; }
 
-          /* PERBAIKAN TAMPILAN LOGIN (PENUH 1 HALAMAN TERPUSAT & FOOTER DI BAWAH) */
-          .auth-wrapper { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(126,34,206,0.95) 0%, rgba(132,204,22,0.95) 100%); padding: 20px; position: relative; }
-          .auth-card { background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); width: 100%; max-width: 420px; padding: 40px; z-index: 2; margin-bottom: 25px; }
-          .auth-footer { text-align: center; color: rgba(255,255,255,0.9); font-size: 0.875rem; z-index: 3; }
+          /* PERBAIKAN TAMPILAN LOGIN (SPLIT KIRI KANAN) */
+          .auth-wrapper { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(126,34,206,0.95) 0%, rgba(132,204,22,0.95) 100%); padding: 20px; }
+          .auth-card-split { display: flex; background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); max-width: 900px; width: 100%; overflow: hidden; z-index: 2; margin-bottom: 20px; }
+          .auth-left { flex: 1; background: linear-gradient(135deg, rgba(126,34,206,1) 0%, rgba(132,204,22,1) 100%); color: white; padding: 40px; display: flex; flex-direction: column; justify-content: center; }
+          .auth-right { flex: 1; padding: 40px; display: flex; flex-direction: column; justify-content: center; background: white; }
+          .auth-footer { text-align: center; color: rgba(255,255,255,0.9); font-size: 0.875rem; z-index: 3; width: 100%; }
+          @media (max-width: 768px) { .auth-card-split { flex-direction: column; } .auth-left { padding: 30px; text-align: center; } .auth-left ul li { justify-content: center; } }
+          .auth-left h2 { font-weight: 700; margin-bottom: 15px; }
+          .auth-left p { font-size: 14px; opacity: 0.9; margin-bottom: 20px; line-height: 1.6; }
+          .auth-left ul { list-style: none; padding: 0; margin: 0; }
+          .auth-left ul li { margin-bottom: 15px; font-size: 14px; display: flex; align-items: center; gap: 12px; }
 
           .wrapper { display: flex; width: 100%; align-items: stretch; position: relative; }
           #sidebar { min-width: 260px; max-width: 260px; background: #3b0764; color: #fff; min-height: 100vh; position: fixed; z-index: 1050; transition: all 0.3s; left: 0; top: 0; }
@@ -1279,23 +1283,34 @@ export default function Page() {
         <div id="loader" class="loader hidden"><div class="spinner"></div></div>
         <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
         
-        <!-- HALAMAN LOGIN PENUH 1 HALAMAN (Persis Gambar Anda) -->
+        <!-- LAYAR LOGIN SPLIT KIRI-KANAN -->
         <div id="view-auth" class="auth-wrapper">
-            <div class="auth-card">
-                <div class="text-center mb-4">
-                    <img src="https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk" class="mb-3 rounded" width="100" alt="Logo">
-                    <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
-                    <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
+            <div class="auth-card-split">
+                <div class="auth-left">
+                    <h2>CBT Belajar Inovasi</h2>
+                    <p>Selamat datang di sistem Ujian Berbasis Komputer. Platform ini dirancang untuk memberikan pengalaman ujian yang interaktif, stabil, dan aman.</p>
+                    <ul>
+                        <li><i class="fas fa-bolt fs-5 text-warning"></i> Sinkronisasi Cepat & Real-Time</li>
+                        <li><i class="fas fa-shield-alt fs-5 text-info"></i> Aman dari Kecurangan</li>
+                        <li><i class="fas fa-mobile-alt fs-5 text-success"></i> Responsif di Semua Perangkat</li>
+                    </ul>
                 </div>
-                <form id="frm-login" onsubmit="event.preventDefault(); if(window.handleLogin) window.handleLogin(); return false;">
-                    <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
-                    <div class="form-floating mb-4 position-relative">
-                        <input type="password" id="p-login" class="form-control" placeholder="Pass" required>
-                        <label>Password</label>
-                        <i class="fas fa-eye position-absolute top-50 end-0 translate-middle-y me-3 text-muted icon-eye-login" id="togglePassword"></i>
+                <div class="auth-right">
+                    <div class="text-center mb-4">
+                        <img src="https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk" class="mb-3 rounded" width="100" alt="Logo">
+                        <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
+                        <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">MASUK SEKARANG</button>
-                </form>
+                    <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;">
+                        <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
+                        <div class="form-floating mb-4 position-relative">
+                            <input type="password" id="p-login" class="form-control" placeholder="Pass" required>
+                            <label>Password</label>
+                            <i class="fas fa-eye position-absolute top-50 end-0 translate-middle-y me-3 text-muted icon-eye-login" id="togglePassword"></i>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">MASUK SEKARANG</button>
+                    </form>
+                </div>
             </div>
             <div class="auth-footer">© 2026 BELAJAR INOVASI</div>
         </div>
