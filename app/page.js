@@ -1666,4 +1666,597 @@ export default function Page() {
       }
 
       function refreshUjianSiswa() {
-          window.Swal.fire({ title: 'Refresh Data Ujian?', text: 'Ini akan menyegarkan data soal tanpa menghilangkan jawaban Anda yang sudah tersimpan di sistem.', icon: 'info', showCancelButton: true
+          window.Swal.fire({ title: 'Refresh Data Ujian?', text: 'Ini akan menyegarkan data soal tanpa menghilangkan jawaban Anda yang sudah tersimpan di sistem.', icon: 'info', showCancelButton: true, confirmButtonText: 'Ya, Refresh' }).then(r => {
+              if (r.isConfirmed) {
+                  window.disableSecurity(); window.stopContinuousBeep(); window.showLoad(true);
+                  window.google.script.run.withSuccessHandler(res => {
+                      window.showLoad(false);
+                      if(res.status === 'success') { totalQ = res.data.length; activeExamViolations = res.maxViolations || 3; window.enableSecurity(); window.runExam(res.data, res.duration, true); window.Swal.fire('Berhasil', 'Soal telah disinkronisasi ulang.', 'success'); } 
+                      else { window.Swal.fire('Gagal', res.msg, 'error'); }
+                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getExamPack(activeExamId, user.ID);
+              }
+          });
+      }
+
+      function enableSecurity() { violationCount = 0; isExamFinished = false; violationLock = false; document.addEventListener("visibilitychange", window.handleVisibilityChange); window.addEventListener("blur", window.handleWindowBlur); document.addEventListener("fullscreenchange", window.handleFullscreenChange); $(document).on("contextmenu.exam", function(e) { e.preventDefault(); return false; }); $(document).on("keydown.exam", function(e) { if (e.key === "PrintScreen" || (e.ctrlKey && e.key === "p") || (e.key === "F12")) { e.preventDefault(); return false; } }); }
+      function disableSecurity() { document.removeEventListener("visibilitychange", window.handleVisibilityChange); window.removeEventListener("blur", window.handleWindowBlur); document.removeEventListener("fullscreenchange", window.handleFullscreenChange); $(document).off(".exam"); }
+      function handleVisibilityChange() { if (!isExamFinished && document.hidden) window.triggerViolation("Anda keluar dari tab ujian!"); }
+      function handleWindowBlur() { if (!isExamFinished) window.triggerViolation("Anda meninggalkan halaman ujian!"); }
+      function handleFullscreenChange() { if (!isExamFinished && !document.fullscreenElement) { window.triggerViolation("Anda keluar dari mode fullscreen!"); try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} } }
+
+      function triggerViolation(msg) {
+          if(violationLock || isExamFinished) return; violationLock = true; violationCount++; $('#viol-disp').text(violationCount);
+          if (violationCount >= activeExamViolations) { window.playBeep(0, true); isExamFinished = true; window.submitExamButton(true); } 
+          else { window.playBeep(violationCount, false); window.Swal.fire({ icon: 'warning', title: 'PERINGATAN PELANGGARAN!', text: `${msg} (${violationCount}/${activeExamViolations})`, confirmButtonText: 'KEMBALI KE UJIAN', allowOutsideClick: false }).then(() => { violationLock = false; try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} }); }
+      }
+
+      function runExam(qs, dur, isResume) {
+          $('#view-dashboard').addClass('hidden'); $('#view-exam').removeClass('hidden'); $('body').addClass('exam-mode');
+          const c = $('#q-slides-container'); const g = $('#nav-grid'); c.empty(); g.empty();
+          qs.forEach((q,i) => {
+              let inp = '';
+              if(q.Tipe==='PGKK') {
+                  const opts = JSON.parse(q.Options||"[]");
+                  inp = `<table class="table table-bordered tbl-pgkk mt-3 bg-white"><thead><tr class="table-light"><th>PERNYATAAN</th><th width="15%">BENAR</th><th width="15%">SALAH</th></tr></thead><tbody>`;
+                  opts.forEach((o,x)=> inp+=`<tr><td><div class="opt-content">${o}</div></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="B" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="S" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td></tr>`);
+                  inp += `</tbody></table>`;
+              } else if(q.Tipe==='Menjodohkan') {
+                  const lItems = JSON.parse(q.Options||"[]"); const rItems = q.Extra || [];
+                  inp = `<div class="match-container" id="match-area-${i}"><input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})"><svg class="match-svg" id="svg-${i}"></svg><div class="match-col" id="col-l-${i}">${lItems.map((t,Idx)=>`<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div><div class="match-col" id="col-r-${i}">${rItems.map((t,Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="window.resetMatch(${i})">Reset Garis</button></div>`;
+              } else if(q.Tipe.includes('PG')) {
+                  const opts = JSON.parse(q.Options||"[]");
+                  opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
+              } else inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="window.saveAnsLocal('${q.QID}', 'ESSAY', ${i})"></textarea>`;
+              c.append(`<div class="q-slide hidden" id="sl-${i}" data-qid="${q.QID}" data-type="${q.Tipe}"><div class="badge bg-primary mb-3">Soal No. ${q.Nomor||i+1}</div><div class="mb-4 q-content lead">${q.Pertanyaan}</div>${inp}</div>`);
+              g.append(`<button id="nb-${i}" class="q-nav-btn ${i===0?'active-q':''}" onclick="window.jump(${i})">${i+1}</button>`);
+          });
+          window.restoreAnswers(qs); window.jump(0); window.applyMathJax();
+          
+          let startTime = Date.now();
+          if(isResume) { const storedState = JSON.parse(localStorage.getItem('cbt_active_exam') || '{}'); if(storedState && storedState.start) startTime = storedState.start; }
+          const endTime = startTime + (dur * 60000);
+          
+          clearInterval(timerInt);
+          timerInt = setInterval(() => {
+              const diff = Math.floor((endTime - Date.now()) / 1000);
+              if(diff <= 0) { window.submitExamButton(true); }
+              else { let m = Math.floor(diff/60), s = diff%60; $('#timer-disp').text(`${m}:${s<10?'0':''}${s}`); if(diff < 300) $('#timer-disp').addClass('text-danger fw-bold'); }
+          }, 1000);
+          
+          clearInterval(monitorInterval);
+          monitorInterval = setInterval(() => { window.google.script.run.updateClientProgress(activeExamId, user.ID, $('.q-nav-btn.answered').length, totalQ); }, 20000);
+          clearInterval(autosaveInterval);
+          autosaveInterval = setInterval(() => {
+              const key = `ANS_${user.ID}_${activeExamId}`;
+              try { const stored = localStorage.getItem(key); if(stored) { let data = JSON.parse(decodeURIComponent(atob(stored))); window.google.script.run.autosaveAnswer(activeExamId, user.ID, JSON.stringify(data)); } } catch(e){}
+          }, 60000);
+      }
+
+      function saveAnsLocal(qid, type, idx) {
+          let val; 
+          if(type.includes('PG')) { if(type==='PGK') { val=[]; $(`input[name="ans-${qid}"]:checked`).each(function(){ val.push(decodeURIComponent($(this).val())) }); } else val = decodeURIComponent($(`input[name="ans-${qid}"]:checked`).val()); } 
+          else if(type === 'PGKK') { val=[]; $(`#sl-${idx} tbody tr`).each(function(x){ val.push($(`input[name="ans-${qid}-${x}"]:checked`).val()||null) }); } 
+          else if(type === 'MATCH') { const raw = $(`#ans-in-${idx}`).val(); val = raw ? JSON.parse(raw) : []; } 
+          else val = $(`#sl-${idx} textarea`).val();
+          
+          const key = `ANS_${user.ID}_${activeExamId}`;
+          let currentData = {};
+          try { const stored = localStorage.getItem(key); if(stored) currentData = JSON.parse(decodeURIComponent(atob(stored))); } catch(e) {}
+          currentData[qid] = val;
+          try { localStorage.setItem(key, btoa(encodeURIComponent(JSON.stringify(currentData)))); } catch(e) {}
+          window.markAns(idx);
+      }
+
+      function restoreAnswers(qs) {
+          const key = `ANS_${user.ID}_${activeExamId}`;
+          let saved = {};
+          try { const stored = localStorage.getItem(key); if(stored) saved = JSON.parse(decodeURIComponent(atob(stored))); } catch(e) {}
+          qs.forEach((q, idx) => { 
+              const val = saved[q.QID]; 
+              if(val) { 
+                  window.markAns(idx); 
+                  if(q.Tipe === 'PGS') $(`input[name="ans-${q.QID}"][value="${encodeURIComponent(val)}"]`).prop('checked', true); 
+                  else if(q.Tipe === 'PGK') val.forEach(v => $(`input[name="ans-${q.QID}"][value="${encodeURIComponent(v)}"]`).prop('checked', true)); 
+                  else if(q.Tipe === 'Uraian') $(`textarea[name="ans-${q.QID}"]`).val(val); 
+                  else if(q.Tipe === 'PGKK') { val.forEach((v, rIdx) => { if(v) $(`input[name="ans-${q.QID}-${rIdx}"][value="${v}"]`).prop('checked', true); }); } 
+                  else if(q.Tipe === 'Menjodohkan') { $(`#ans-in-${idx}`).val(JSON.stringify(val)); setTimeout(() => window.redrawMatchLines(idx, val, q.Extra), 500); } 
+              } 
+          });
+      }
+
+      function markAns(i) { $(`#nb-${i}`).addClass('answered'); }
+      function jump(i) { currentQIdx = i; $('.q-slide').addClass('hidden');$(`#sl-${i}`).removeClass('hidden'); $('.q-nav-btn').removeClass('active-q');$(`#nb-${i}`).addClass('active-q'); if($(`#sl-${i}`).data('type')==='Menjodohkan') setTimeout(()=>window.drawLines(i), 50); window.applyMathJax(); }
+      function navSlide(dir) { let next = currentQIdx + dir; if(next >= 0 && next < totalQ) window.jump(next); }
+
+      function submitExamButton(force = false) {
+          if (examSubmitting) return;
+          if (force) { window.processSubmission(); return; }
+          const answeredCount = $('.q-nav-btn.answered').length;
+          const activeState = JSON.parse(localStorage.getItem('cbt_active_exam') || '{}');
+          const reqToken = activeState.token && activeState.token !== '-' ? String(activeState.token).trim().toUpperCase() : "";
+          let inputPlace = reqToken ? 'Ketik Token Kirim...' : 'Ketik kata SELESAI...';
+          let msgHtml = `<p class="mb-3">Anda telah mengerjakan <b>${answeredCount}</b> dari <b>${totalQ}</b> soal.</p>`;
+          if(reqToken) { msgHtml += '<div class="alert alert-info small"><i class="fas fa-lock me-1"></i> Silakan masukkan <b>Token Kirim Jawaban</b> (Minta pada pengawas):</div>'; } 
+          else { msgHtml += '<div class="alert alert-warning small">Pastikan semua soal terjawab.<br>Ketik kata <b>SELESAI</b> di bawah ini untuk mengonfirmasi pengiriman:</div>'; }
+          
+          window.Swal.fire({
+              title: 'Kirim Jawaban', html: `<div class="text-start">${msgHtml}</div>`, input: 'text', inputAttributes: { autocapitalize: 'characters', autocomplete: 'off' },
+              inputPlaceholder: inputPlace, icon: 'question', showCancelButton: true, allowOutsideClick: false, allowEscapeKey: false,
+              confirmButtonText: '<i class="fas fa-paper-plane me-1"></i> Kirim Sekarang', cancelButtonText: 'Batal', confirmButtonColor: '#198754',
+              preConfirm: (inputValue) => {
+                  let val = (inputValue || '').trim().toUpperCase();
+                  if (reqToken) { if (val !== reqToken) { window.Swal.showValidationMessage('Token Kirim Salah!'); return false; } } 
+                  else { if (val !== 'SELESAI') { window.Swal.showValidationMessage('Ketik kata SELESAI untuk mengirim.'); return false; } }
+                  return true;
+              }
+          }).then((result) => { if (result.isConfirmed) { window.processSubmission(); } });
+      }
+
+      function processSubmission(retryCount = 0) {
+          if (examSubmitting && retryCount === 0) return;
+          examSubmitting = true;
+          const btn = $('#btn-finish'); const originalText = '<i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN';
+          if (retryCount === 0) {
+              btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Mengirim...');
+              clearInterval(timerInt); clearInterval(monitorInterval); clearInterval(autosaveInterval);
+              isExamFinished = true; window.disableSecurity(); window.stopContinuousBeep();
+          }
+          let ans = [];
+          try {
+              $('.q-slide').each(function(idx) {
+                  const qid = $(this).data('qid'); const t =$(this).data('type'); let v = null;
+                  if (t.includes('PG') && t !== 'PGKK') {
+                      if (t === 'PGK') { v = []; $(this).find('input:checked').each(function() { v.push(decodeURIComponent($(this).val())) }); }
+                      else { const checked = $(this).find('input:checked').val(); if(checked) v = decodeURIComponent(checked); }
+                  }
+                  else if (t === 'PGKK') { v = []; $(this).find('tbody tr').each(function(x) { v.push($(this).find('input:checked').val() || null) }); }
+                  else if (t === 'Menjodohkan') { const raw = $(`#ans-in-${idx}`).val(); v = raw ? JSON.parse(raw) : []; }
+                  else { v = $(this).find('textarea').val(); }
+                  if (v !== null && v !== undefined) ans.push({ qid: qid, answer: v });
+              });
+          } catch(e) { console.error("Error collecting", e); }
+          
+          window.google.script.run.withSuccessHandler((res) => {
+              examSubmitting = false; btn.prop('disabled', false).html(originalText);
+              window.stopContinuousBeep();
+              if (res.status === 'success') {
+                  localStorage.removeItem('cbt_active_exam'); localStorage.removeItem(`ANS_${user.ID}_${activeExamId}`);
+                  $('body').removeClass('exam-mode'); try { document.exitFullscreen().catch(()=>{}) } catch (e) {};
+                  window.Swal.fire({
+                      title: 'Selesai!',
+                      html: `<div class="mb-3 text-success" style="font-size: 4rem;"><i class="fas fa-check-circle"></i></div><h5 class="fw-bold">${res.msg === 'Sudah dikirim.' ? 'Batas Ujian Anda Telah Habis' : violationCount >= activeExamViolations ? 'Jawaban Otomatis Terkirim Karena Pelanggaran' : 'Jawaban Berhasil Dikirim'}</h5><p class="text-muted mt-2">Hasil pengerjaan Anda telah tersimpan di sistem.</p>`,
+                      confirmButtonText: 'KEMBALI KE BERANDA', confirmButtonColor: '#7e22ce', allowOutsideClick: false, allowEscapeKey: false
+                  }).then(() => { $('#view-exam').addClass('hidden'); $('#view-dashboard').removeClass('hidden'); window.loadPage('siswa-home'); });
+              } else { window.Swal.fire('Gagal', res.msg || 'Terjadi kesalahan sistem.', 'error'); }
+          }).withFailureHandler((err) => {
+              if (retryCount < 3) { setTimeout(() => window.processSubmission(retryCount + 1), 3000); } 
+              else { examSubmitting = false; btn.prop('disabled', false).html(originalText); window.Swal.fire('Koneksi Terputus', 'Gagal menghubungi server setelah beberapa percobaan. Silakan coba klik Kirim lagi.', 'error'); }
+          }).submitExam(user.ID, activeExamId, ans, violationCount);
+      }
+
+      let matchState = {};
+      function matchClick(qIdx, side, itemIdx, el) { if(!matchState[qIdx]) matchState[qIdx] = { sel: null, pairs: [] }; const st = matchState[qIdx]; $(`#match-area-${qIdx} .match-${side}`).removeClass('selected'); $(el).addClass('selected'); if(side === 'l') { st.sel = { idx: itemIdx, el: el }; } else { if(st.sel) { st.pairs = st.pairs.filter(p => p.left !== st.sel.idx); st.pairs.push({ left: st.sel.idx, right: itemIdx, rightVal: decodeURIComponent($(el).data('val')) }); window.drawLines(qIdx); window.markAns(qIdx); st.sel = null; $(`#match-area-${qIdx} .match-item`).removeClass('selected'); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); } } }
+      function drawLines(qIdx) { if(!matchState[qIdx]) return; const svg = document.getElementById(`svg-${qIdx}`); const container = document.getElementById(`match-area-${qIdx}`); if(!container || !svg) return; const rectC = container.getBoundingClientRect(); let html = ''; let answerArr = []; const leftCount = $(`#col-l-${qIdx}`).children().length; for(let k=0; k<leftCount; k++) answerArr[k] = null; $(`#match-area-${qIdx} .match-item`).removeClass('matched'); matchState[qIdx].pairs.forEach(p => { const elL = $(`#col-l-${qIdx}`).children().eq(p.left)[0]; const elR = $(`#col-r-${qIdx}`).children().eq(p.right)[0]; if(elL && elR) { const rL = elL.getBoundingClientRect(); const rR = elR.getBoundingClientRect(); const x1 = rL.right - rectC.left; const y1 = (rL.top + rL.height/2) - rectC.top; const x2 = rR.left - rectC.left; const y2 = (rR.top + rR.height/2) - rectC.top; html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#84cc16" stroke-width="3" />`; $(elL).addClass('matched'); $(elR).addClass('matched'); answerArr[p.left] = p.rightVal; } }); svg.innerHTML = html; $(`#ans-in-${qIdx}`).val(JSON.stringify(answerArr)); }
+      function resetMatch(qIdx) { matchState[qIdx] = { sel: null, pairs: [] }; document.getElementById(`svg-${qIdx}`).innerHTML = ''; $(`#match-area-${qIdx} .match-item`).removeClass('matched selected'); $(`#ans-in-${qIdx}`).val(''); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); }
+      function redrawMatchLines(qIdx, savedArr, rightItems) { if(!matchState[qIdx]) matchState[qIdx] = { sel: null, pairs: [] }; if(Array.isArray(savedArr)) { matchState[qIdx].pairs = []; savedArr.forEach((val, lIdx) => { if(val) { const rIdx = rightItems.indexOf(val); if(rIdx > -1) { matchState[qIdx].pairs.push({ left: lIdx, right: rIdx, rightVal: val }); } } }); window.drawLines(qIdx); } }
+
+      function editUser(s){ const u=JSON.parse(decodeURIComponent(s)); $('#modalUser').modal('show'); $('#mu-id').val(u.ID); $('#mu-nama').val(u.Nama); $('#mu-user').val(u.Username); $('#mu-pass').val(u.Password); $('#mu-role').val(u.Role); $('#mu-kelas').val(u.Kelas); $('#mu-sekolah').val(u.Sekolah); }
+      
+      // Fungsi Menyimpan User dan Update Tabel Otomatis
+      function saveUser(e){ 
+          if (e) e.preventDefault(); 
+          const d={id:$('#mu-id').val(), nama:$('#mu-nama').val(), username:$('#mu-user').val(), password:$('#mu-pass').val(), role:$('#mu-role').val(), kelas:$('#mu-kelas').val(), sekolah:$('#mu-sekolah').val()}; 
+          window.showLoad(true); 
+          window.google.script.run.withSuccessHandler(()=>{
+              $('#modalUser').modal('hide'); 
+              window.loadPage('admin-users'); 
+          }).withFailureHandler(err => { 
+              window.showLoad(false); 
+              window.Swal.fire('Error', err.message, 'error'); 
+          }).adminManageUser('save',d); 
+      }
+      
+      function delUser(id){ if(confirm('Hapus User?')) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.loadPage('admin-users');}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error')}).adminManageUser('delete',{id:id}); } }
+      function handleResetCache() { window.Swal.fire({title:'Reset Cache?', text:"Membersihkan data sementara sistem.", icon:'warning', showCancelButton:true}).then((r)=>{ if(r.isConfirmed){ window.showLoad(true); window.google.script.run.withSuccessHandler(r=>{window.showLoad(false);window.Swal.fire('Sukses',r.msg,'success')}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).sysResetCache(); }}); }
+      function deleteResult(rid) { window.Swal.fire({title:'Hapus & Reset Ujian?', text:'Data dihapus, cache/status ujian direset, dan siswa bisa ujian kembali.', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33'}).then(r=>{ if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(res=>{ window.showLoad(false); if(res.status==='success'){ window.Swal.fire('Berhasil',res.msg,'success'); window.loadPage('hasil-rekap'); } else window.Swal.fire('Gagal',res.msg,'error'); }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminDeleteResult(rid); } }); }
+
+      function renderMonitoring(){ 
+          window.showLoad(true); 
+          window.google.script.run.withSuccessHandler(r=>{ 
+              window.showLoad(false); 
+              let h=`<div class="row g-2 mb-3"><div class="col-md-5"><select id="mon-sel" class="form-select" onchange="window.startMon()"><option value="">Pilih Ujian...</option>`; 
+              r.data.exams.forEach(e=>h+=`<option value="${e.ExamID}">${e.Judul}</option>`); 
+              h+=`</select></div>
+              <div class="col-md-4"><input type="text" id="mon-search" class="form-control" placeholder="Cari..." onkeyup="window.filterTable('tbl-mon', this.value)"></div>
+              <div class="col-md-3"><button class="btn btn-danger w-100 fw-bold" onclick="window.triggerResetMassal()"><i class="fas fa-recycle me-1"></i> Reset Semua Siswa</button></div>
+              </div><div id="mon-area" class="bg-white p-3 rounded shadow-sm" style="min-height:200px">Silakan pilih ujian untuk memonitor progres secara Live.</div>`; 
+              $('#content-area').html(h); 
+          }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getDashboardData(user.Role, user.ID, user.Kelas); 
+      }
+
+      function startMon(){ const id=$('#mon-sel').val(); if(id){ window.fetchMon(id); clearInterval(monitorInterval); monitorInterval=setInterval(()=>window.fetchMon(id),10000); } else $('#mon-area').empty(); }
+      function fetchMon(id){ window.google.script.run.withSuccessHandler(r=>{ if(r.status==='error') { $('#mon-area').html(`<div class="alert alert-warning">${r.msg}</div>`); return; } let h=`<table id="tbl-mon" class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama</th><th>Progress</th><th>Status</th><th>Aksi</th></tr></thead><tbody>`; r.data.forEach(d=>{ const p=Math.round((d.terjawab/d.total)*100)||0; h+=`<tr data-uid="${d.id}" data-nama="${d.nama}"><td><div class="fw-bold">${d.nama}</div><small class="text-muted">${d.kelas}</small></td><td><div class="progress" style="height:20px"><div class="progress-bar bg-success" style="width:${p}%">${d.terjawab}/${d.total}</div></div></td><td>${d.status==='Online'?'<span class="badge bg-success">ON</span>':'<span class="badge bg-secondary">OFF</span>'}</td><td><button class="btn btn-sm btn-outline-danger" onclick="window.triggerReset('${d.id}', '${d.nama}')">Reset User</button></td></tr>` }); $('#content-area').html(h+'</tbody></table>'); const cur=$('#mon-search').val(); if(cur) window.filterTable('tbl-mon', cur); }).withFailureHandler(err => console.log(err)).getLiveMonitoring(id, user.Role, user.Kelas); }
+
+      function triggerReset(sId, sName) { 
+          const eId = $('#mon-sel').val(); if(!sId || !eId) return window.Swal.fire('Perhatian', 'Pilih ujian terlebih dahulu', 'warning'); 
+          window.Swal.fire({ title: 'Reset Siswa Ini?', text: `${sName} akan dikeluarkan dan harus login ulang.`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Ya, Reset!' }).then(r => { 
+              if(r.isConfirmed) { 
+                  window.Swal.fire({title: 'Memproses...', allowOutsideClick: false, didOpen: () => window.Swal.showLoading() }); 
+                  window.google.script.run.withSuccessHandler(res => { 
+                      if(res.status === 'success') { window.Swal.fire('Berhasil', res.msg, 'success'); window.fetchMon(eId); } else { window.Swal.fire('Gagal', res.msg, 'error'); } 
+                  }).withFailureHandler(err => window.Swal.fire('Error', err.message, 'error')).teacherResetStatus(sId, eId, user.Role, user.Kelas); 
+              } 
+          }); 
+      }
+
+      function triggerResetMassal() {
+          const eId = $('#mon-sel').val(); 
+          if(!eId) return window.Swal.fire('Perhatian', 'Pilih ujian terlebih dahulu dari dropdown', 'warning');
+          window.Swal.fire({
+              title: 'Reset Seluruh Siswa?',
+              text: 'Ini akan mengeluarkan semua siswa yang sedang mengerjakan ujian ini. Lanjutkan?',
+              icon: 'error',
+              showCancelButton: true,
+              confirmButtonColor: '#d33',
+              confirmButtonText: 'Ya, Reset Semua!'
+          }).then(r => {
+              if(r.isConfirmed) {
+                  window.Swal.fire({title: 'Memproses...', allowOutsideClick: false, didOpen: () => window.Swal.showLoading() });
+                  window.google.script.run.withSuccessHandler(res => {
+                      if(res.status === 'success') { window.Swal.fire('Berhasil', res.msg, 'success'); window.fetchMon(eId); } else { window.Swal.fire('Gagal', res.msg, 'error'); }
+                  }).withFailureHandler(err => window.Swal.fire('Error', err.message, 'error')).teacherResetMassal(eId, user.Role, user.Kelas);
+              }
+          })
+      }
+
+      function filterTable(tid, q) { const f=q.toLowerCase(); $(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); }
+
+      // ==========================================
+      // GLOBAL BINDING (SANGAT PENTING UNTUK HTML ONCLICK)
+      // ==========================================
+      window.playBeep = playBeep; window.stopContinuousBeep = stopContinuousBeep; window.applyMathJax = applyMathJax;
+      window.checkResumeExam = checkResumeExam; window.toggleSidebar = toggleSidebar; window.showLoad = showLoad; window.toast = toast;
+      window.handleLogin = handleLogin; window.handleLogout = handleLogout; window.initDash = initDash; window.appRefresh = appRefresh;
+      window.loadPage = loadPage; window.exportToExcel = exportToExcel; window.generateUserExcelTemplate = generateUserExcelTemplate;
+      window.handleUploadUsersExcel = handleUploadUsersExcel; window.toggleAllCb = toggleAllCb; window.checkBulkDelete = checkBulkDelete;
+      window.bulkDeleteUsers = bulkDeleteUsers; window.bulkDeleteRekap = bulkDeleteRekap; window.renderUsers = renderUsers;
+      window.renderRecapTable = renderRecapTable; window.applyFilter = applyFilter; window.applyKatrolMassal = applyKatrolMassal;
+      window.renderAdministrasi = renderAdministrasi; window.printKartuLogin = printKartuLogin; window.printDaftarHadir = printDaftarHadir;
+      window.printBeritaAcara = printBeritaAcara; window.printFilteredRecap = printFilteredRecap; window.printRecap = printRecap;
+      window.openKoreksi = openKoreksi; window.saveKoreksi = saveKoreksi; window.renderContent = renderContent; 
+      window.filterAdminUjian = filterAdminUjian; window.openExamModal = openExamModal; window.saveExam = saveExam; window.delExam = delExam;
+      window.manageQ = manageQ; window.generateQuestionExcelTemplate = generateQuestionExcelTemplate; 
+      window.handleUploadQuestionsExcel = handleUploadQuestionsExcel; window.loadQList = loadQList; window.addNewQuestionBlock = addNewQuestionBlock;
+      window.generateQHTML = generateQHTML; window.generateAllQHTML = generateAllQHTML; window.previewAllQ = previewAllQ;
+      window.downloadAllQ = downloadAllQ; window.renderQuestionBlock = renderQuestionBlock; window.toggleEditQ = toggleEditQ;
+      window.renderAnsFields = renderAnsFields; window.genOptRow = genOptRow; window.genPGKKRow = genPGKKRow; window.genMatchRow = genMatchRow;
+      window.addOptRow = addOptRow; window.addPGKKRowTo = addPGKKRowTo; window.addMatchRowTo = addMatchRowTo; window.removeOptRow = removeOptRow;
+      window.saveQBlock = saveQBlock; window.deleteQBlock = deleteQBlock; window.startExam = startExam; window.refreshUjianSiswa = refreshUjianSiswa;
+      window.enableSecurity = enableSecurity; window.disableSecurity = disableSecurity; window.handleVisibilityChange = handleVisibilityChange;
+      window.handleWindowBlur = handleWindowBlur; window.handleFullscreenChange = handleFullscreenChange; window.triggerViolation = triggerViolation;
+      window.runExam = runExam; window.saveAnsLocal = saveAnsLocal; window.restoreAnswers = restoreAnswers; window.markAns = markAns;
+      window.jump = jump; window.navSlide = navSlide; window.submitExamButton = submitExamButton; window.processSubmission = processSubmission;
+      window.matchClick = matchClick; window.drawLines = drawLines; window.resetMatch = resetMatch; window.redrawMatchLines = redrawMatchLines;
+      window.editUser = editUser; window.saveUser = saveUser; window.delUser = delUser; window.handleResetCache = handleResetCache;
+      window.deleteResult = deleteResult; window.renderMonitoring = renderMonitoring; window.startMon = startMon; window.fetchMon = fetchMon;
+      window.triggerReset = triggerReset; window.triggerResetMassal = triggerResetMassal; window.filterTable = filterTable;
+
+      // ==========================================
+      // ON DOCUMENT READY
+      // ==========================================
+      $('#togglePassword').on('click', function() {
+          const type = $('#p-login').attr('type') === 'password' ? 'text' : 'password';
+          $('#p-login').attr('type', type);
+          $(this).toggleClass('fa-eye fa-eye-slash');
+      });
+      const savedUser = localStorage.getItem('cbt_user');
+      if(savedUser) {
+          user = JSON.parse(savedUser);
+          $('#logo-container img').attr('src', user.LogoUrl || LOGO_BARU);
+          window.initDash();
+          window.checkResumeExam();
+      }
+    };
+
+    initApp();
+  }, []);
+
+  // CEGAH VERCEL CRASH (HYDRATION MISMATCH)
+  if (!isMounted) return null;
+
+  return (
+    <>
+      <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet" />
+      <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+      <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet" />
+      <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet" />
+
+      <Script src="https://code.jquery.com/jquery-3.6.0.min.js" strategy="beforeInteractive" />
+      <Script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" strategy="beforeInteractive" />
+      <Script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" strategy="beforeInteractive" />
+      <Script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js" strategy="beforeInteractive" />
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" strategy="beforeInteractive" />
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/babel-polyfill/7.12.1/polyfill.min.js" strategy="beforeInteractive" />
+      <Script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" strategy="lazyOnload" />
+
+      <div dangerouslySetInnerHTML={{ __html: `
+        <style>
+          :root { 
+              --primary: #7e22ce; 
+              --secondary: #a855f7; 
+              --accent: #84cc16; 
+              --bg-body: #faf5ff; 
+          }
+          body { font-family: 'Poppins', sans-serif; background-color: var(--bg-body); color: #1e293b; overflow-x: hidden; }
+          body.exam-mode { overflow: hidden; user-select: none; }
+          .hidden { display: none !important; }
+          
+          /* INJEKSI CSS TEMA UNGU/HIJAU MUDA KESELURUH DASBOR */
+          .text-primary { color: var(--primary) !important; }
+          .bg-primary { background-color: var(--primary) !important; color: white !important; }
+          .btn-primary { background-color: var(--primary) !important; border-color: var(--primary) !important; color: white !important; }
+          .btn-primary:hover { background-color: #6b21a8 !important; border-color: #6b21a8 !important; }
+          .btn-outline-primary { color: var(--primary) !important; border-color: var(--primary) !important; }
+          .btn-outline-primary:hover { background-color: var(--primary) !important; color: white !important; }
+          .border-primary { border-color: var(--primary) !important; }
+          .text-success { color: var(--accent) !important; }
+          .bg-success { background-color: var(--accent) !important; color: white !important; }
+          .btn-success { background-color: var(--accent) !important; border-color: var(--accent) !important; color: white !important; }
+          .btn-success:hover { background-color: #65a30d !important; border-color: #65a30d !important; }
+          .badge.bg-primary { background-color: var(--primary) !important; }
+          .badge.bg-success { background-color: var(--accent) !important; }
+
+          /* PERBAIKAN TAMPILAN LOGIN (PENUH 1 HALAMAN TERPUSAT) */
+          .auth-wrapper { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(126,34,206,0.9) 0%, rgba(132,204,22,0.9) 100%); padding: 20px; }
+          .auth-card { background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); width: 100%; max-width: 420px; padding: 40px; z-index: 2; margin-bottom: 15px; }
+          .auth-footer { text-align: center; color: rgba(255,255,255,0.8); font-size: 0.875rem; z-index: 3; }
+
+          .wrapper { display: flex; width: 100%; align-items: stretch; position: relative; }
+          #sidebar { min-width: 260px; max-width: 260px; background: #3b0764; color: #fff; min-height: 100vh; position: fixed; z-index: 1050; transition: all 0.3s; left: 0; top: 0; }
+          #sidebar.active { left: -260px; }
+          #content { width: 100%; margin-left: 260px; padding: 20px; transition: all 0.3s; min-height: 100vh; display: flex; flex-direction: column; }
+          #sidebar ul li a { padding: 15px 25px; display: block; color: #cbd5e1; text-decoration: none; border-left: 4px solid transparent; cursor: pointer; }
+          #sidebar ul li a:hover, #sidebar ul li a.active { background: rgba(255,255,255,0.05); color: #fff; border-left-color: var(--accent); }
+          @media (max-width: 768px) { #sidebar { left: -260px; } #sidebar.active { left: 0; } #content { margin-left: 0; padding: 15px; } .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1040; display: none; } .overlay.active { display: block; } }
+          
+          #view-exam { position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; z-index: 9999; background: #f8fafc; overflow: hidden; display: flex; flex-direction: column; }
+          .exam-header { flex-shrink: 0; height: 60px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+          .exam-container-split { flex-grow: 1; display: flex; gap: 20px; padding: 20px; overflow: hidden; }
+          .q-main-area { flex: 3; background: white; border-radius: 12px; padding: 25px; display: flex; flex-direction: column; overflow-y: auto; height: 100%; }
+          #q-slides-container { flex-grow: 1; overflow-y: auto; }
+          .q-nav-area { flex: 1; background: white; border-radius: 12px; padding: 20px; overflow-y: auto; height: 100%; }
+          @media (max-width: 768px) { .exam-container-split { flex-direction: column-reverse; padding: 10px; gap: 10px; } .q-nav-area { flex: none; height: auto; max-height: 150px; } }
+          .q-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 8px; margin-top: 15px; }
+          .q-nav-btn { aspect-ratio: 1; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 6px; cursor: pointer; }
+          .q-nav-btn.active-q { background: var(--secondary); color: white; }
+          .q-nav-btn.answered { background: var(--accent); color: white; }
+          .loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 10000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
+          .spinner { width: 50px; height: 50px; border: 5px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+          @keyframes spin { 100% { transform: rotate(360deg); } }
+          .match-container { position: relative; width: 100%; min-height: 300px; display: flex; justify-content: space-between; padding: 10px; user-select: none; }
+          .match-col { width: 40%; display: flex; flex-direction: column; gap: 15px; z-index: 2; }
+          .match-item { background: #fff; border: 2px solid #e2e8f0; padding: 10px 15px; border-radius: 8px; cursor: pointer; transition: all 0.2s; position: relative; }
+          .match-item:hover { border-color: var(--secondary); }
+          .match-item.selected { border-color: var(--primary); background: #eff6ff; }
+          .match-item.matched { border-color: var(--accent); background: #f0fdf4; opacity: 0.8; }
+          .match-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+          .tbl-pgkk th, .tbl-pgkk td { text-align: center; vertical-align: middle; }
+          .tbl-pgkk td:first-child { text-align: left; }
+          .swal2-container { z-index: 20000 !important; }
+          .btn-loading { pointer-events: none; opacity: 0.8; }
+          #q-slides-container .form-check-input { width: 1.8em !important; height: 1.8em !important; cursor: pointer; margin-top: 0 !important; }
+          .clickable-opt { cursor: pointer; transition: all 0.2s ease-in-out; margin-bottom: 0; }
+          .clickable-opt:hover { background-color: #f1f5f9 !important; border-color: var(--secondary) !important; }
+          #content-area { flex: 1; }
+          .icon-eye-login { cursor: pointer; z-index: 10; font-size: 1.2rem; }
+        </style>
+
+        <div id="loader" class="loader hidden"><div class="spinner"></div></div>
+        <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
+        
+        <!-- HALAMAN LOGIN PENUH & TERPUSAT -->
+        <div id="view-auth" class="auth-wrapper">
+            <div class="auth-card">
+                <div class="text-center mb-4">
+                    <img src="https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk" class="mb-3 rounded" width="100" alt="Logo">
+                    <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
+                    <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
+                </div>
+                <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;" action="javascript:void(0);">
+                    <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
+                    <div class="form-floating mb-4 position-relative">
+                        <input type="password" id="p-login" class="form-control" placeholder="Pass" required>
+                        <label>Password</label>
+                        <i class="fas fa-eye position-absolute top-50 end-0 translate-middle-y me-3 text-muted icon-eye-login" id="togglePassword"></i>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">MASUK SEKARANG</button>
+                </form>
+            </div>
+            <div class="auth-footer">© 2026 BELAJAR INOVASI</div>
+        </div>
+
+        <div id="view-dashboard" class="hidden wrapper">
+            <nav id="sidebar">
+                <div class="sidebar-header d-flex align-items-center justify-content-between p-3 border-bottom border-secondary">
+                    <div><h5 class="fw-bold mb-0 text-white">MENU UTAMA</h5><small class="text-white-50" id="user-role-disp"></small></div>
+                </div>
+                <ul class="list-unstyled components hidden" id="menu-admin">
+                    <li><a onclick="window.loadPage('admin-home')" class="nav-link active"><i class="fas fa-home me-2"></i>Dashboard</a></li>
+                    <li><a onclick="window.loadPage('admin-users')" class="nav-link"><i class="fas fa-users me-2"></i>Data Peserta</a></li>
+                    <li><a onclick="window.loadPage('admin-ujian')" class="nav-link"><i class="fas fa-calendar me-2"></i>Bank Soal</a></li>
+                    <li><a onclick="window.loadPage('hasil-rekap')" class="nav-link"><i class="fas fa-chart-bar me-2"></i>Hasil Nilai</a></li>
+                    <li><a onclick="window.loadPage('guru-monitoring')" class="nav-link"><i class="fas fa-tv me-2"></i>Monitoring</a></li>
+                    <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link text-info"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
+                    <li><a onclick="window.handleResetCache()" class="nav-link text-warning"><i class="fas fa-bolt me-2"></i>Reset Cache</a></li>
+                </ul>
+                <ul class="list-unstyled components hidden" id="menu-guru">
+                    <li><a onclick="window.loadPage('admin-home')" class="nav-link active"><i class="fas fa-home me-2"></i>Dashboard</a></li>
+                    <li><a onclick="window.loadPage('admin-users')" class="nav-link"><i class="fas fa-users me-2"></i>Data Peserta</a></li>
+                    <li><a onclick="window.loadPage('admin-ujian')" class="nav-link"><i class="fas fa-file-alt me-2"></i>Bank Soal</a></li>
+                    <li><a onclick="window.loadPage('hasil-rekap')" class="nav-link"><i class="fas fa-poll me-2"></i>Hasil Nilai</a></li>
+                    <li><a onclick="window.loadPage('guru-monitoring')" class="nav-link"><i class="fas fa-desktop me-2"></i>Live Monitor</a></li>
+                    <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link text-info"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
+                </ul>
+                <ul class="list-unstyled components hidden" id="menu-siswa">
+                    <li><a onclick="window.loadPage('siswa-home')" class="nav-link active"><i class="fas fa-pencil-alt me-2"></i>Ujian Saya</a></li>
+                </ul>
+                <div class="p-3 mt-auto border-top border-secondary position-absolute bottom-0 w-100">
+                    <div class="mb-3 text-white small"><i class="fas fa-user-circle me-1"></i> <span id="u-name-disp" class="fw-bold">User</span></div>
+                    <button onclick="window.handleLogout()" class="btn btn-danger btn-sm w-100">LOGOUT</button>
+                </div>
+            </nav>
+            <div id="content">
+                <nav class="navbar navbar-light bg-white rounded shadow-sm mb-4 p-2 d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <button id="menuToggle" class="btn btn-light me-2 border" onclick="window.toggleSidebar()"><i class="fas fa-bars"></i></button>
+                        <span class="navbar-brand mb-0 h1 fw-bold fs-5 text-primary" id="page-title">DASHBOARD</span>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm rounded-pill px-3" onclick="window.appRefresh()"><i class="fas fa-sync-alt"></i> Refresh</button>
+                </nav>
+                <div id="content-area"></div>
+                <footer class="mt-4 text-center text-muted small pb-3 border-top pt-3">© 2026 BELAJAR INOVASI</footer>
+            </div>
+        </div>
+
+        <div id="view-exam" class="hidden">
+            <div class="exam-header">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-laptop-code me-2 fs-4 text-primary"></i>
+                    <div class="d-none d-md-block"><h6 class="fw-bold m-0" id="do-exam-title">Judul Ujian</h6></div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-primary me-2 shadow-sm" onclick="window.refreshUjianSiswa()"><i class="fas fa-sync-alt me-1"></i>Refresh Soal</button>
+                    <div class="badge bg-dark fs-6 p-2 font-monospace"><i class="fas fa-clock me-1"></i><span id="timer-disp">00:00</span></div>
+                </div>
+            </div>
+            <div class="exam-container-split">
+                <div class="q-main-area">
+                    <div id="q-slides-container"></div>
+                    <div class="d-flex justify-content-between mt-4 pt-3 border-top">
+                        <button class="btn btn-outline-secondary px-3" id="btn-prev" onclick="window.navSlide(-1)"><i class="fas fa-chevron-left"></i> Prev</button>
+                        <button class="btn btn-primary px-3" id="btn-next" onclick="window.navSlide(1)">Next <i class="fas fa-chevron-right"></i></button>
+                        <button class="btn btn-success px-4" id="btn-finish" onclick="window.submitExamButton(false)"><i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN</button>
+                    </div>
+                </div>
+                <div class="q-nav-area shadow-sm">
+                    <h6 class="fw-bold border-bottom pb-2 mb-2 small text-muted">NAVIGASI SOAL</h6>
+                    <div id="nav-grid" class="q-grid"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalExam" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white"><h5 class="modal-title">Konfigurasi Ujian</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;" action="javascript:void(0);">
+                            <input type="hidden" id="ex-id" name="examId">
+                            <div class="mb-3"><label class="small fw-bold">Judul Ujian</label><input type="text" name="judul" id="ex-judul" class="form-control" required></div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6"><label class="small fw-bold">Mata Pelajaran</label><input type="text" name="mapel" id="ex-mapel" class="form-control" required></div>
+                                <div class="col-md-6"><label class="small fw-bold">Durasi (Menit)</label><input type="number" name="durasi" id="ex-durasi" class="form-control" required></div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6"><label class="small fw-bold">Waktu Mulai</label><input type="datetime-local" name="start" id="ex-start" class="form-control" required></div>
+                                <div class="col-md-6"><label class="small fw-bold">Waktu Selesai</label><input type="datetime-local" name="end" id="ex-end" class="form-control" required></div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-3">
+                                    <label class="small fw-bold">Target Kelas</label>
+                                    <div id="kelas-container">
+                                        <input type="text" name="targetKelas" id="ex-kelas" class="form-control" placeholder="Contoh: 7A, 7B" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-3"><label class="small fw-bold">Batas Pelanggaran</label><input type="number" name="maxViolations" id="ex-violations" class="form-control" value="3" required></div>
+                                <div class="col-md-3"><label class="small fw-bold">Limit Kerjakan</label><input type="number" name="limit" id="ex-limit" class="form-control" value="1"></div>
+                                <div class="col-md-3"><label class="small fw-bold">Token (Opsional)</label><input type="text" name="token" id="ex-token" class="form-control"></div>
+                            </div>
+                            <div class="d-flex gap-4 mb-3">
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="showStats" id="ex-showStats" value="Yes"><label class="small">Tampilkan Nilai</label></div>
+                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="randomQ" id="ex-randomQ" value="Yes"><label class="small">Acak Soal</label></div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 fw-bold">SIMPAN JADWAL</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalQ" tabindex="-1">
+            <div class="modal-dialog modal-fullscreen">
+                <div class="modal-content bg-light">
+                    <div class="modal-header bg-white shadow-sm">
+                        <h5 class="modal-title fw-bold text-primary">Editor Soal</h5>
+                        <button class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="container" style="max-width:900px">
+                            <div class="alert alert-info small mb-3">
+                                <b>Tips Format Persamaan/LaTeX:</b> Anda bisa menggunakan tombol <b>Rumus</b> di editor untuk memasukkan persamaan matematika.
+                            </div>
+                            <div id="q-list-container"></div>
+                            <div class="text-center mt-5 mb-5">
+                                <button class="btn btn-lg btn-success rounded-pill px-5 shadow" onclick="window.addNewQuestionBlock()"><i class="fas fa-plus-circle me-2"></i> TAMBAH SOAL</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalUser" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white"><h5 class="modal-title">User Editor</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <form id="frm-user" onsubmit="event.preventDefault(); window.saveUser(event); return false;" action="javascript:void(0);">
+                            <input type="hidden" id="mu-id">
+                            <input type="text" id="mu-nama" class="form-control mb-2" placeholder="Nama Lengkap" required>
+                            <input type="text" id="mu-user" class="form-control mb-2" placeholder="Username" required>
+                            <input type="text" id="mu-pass" class="form-control mb-2" placeholder="Password" required>
+                            <div class="row g-2 mb-2">
+                                <div class="col"><select id="mu-role" class="form-select"><option value="siswa">Siswa</option><option value="guru">Guru</option><option value="admin">Admin</option></select></div>
+                                <div class="col"><input type="text" id="mu-kelas" class="form-control" placeholder="Kelas"></div>
+                            </div>
+                            <input type="text" id="mu-sekolah" class="form-control mb-2" placeholder="Sekolah (Opsional)">
+                            <button type="submit" class="btn btn-success w-100 mt-3">Simpan User</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalKoreksi" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-info text-white"><h5 class="modal-title fw-bold"><i class="fas fa-edit me-2"></i>Koreksi Jawaban Siswa</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body bg-light" id="kor-body"></div>
+                    <div class="modal-footer bg-white border-top">
+                        <button class="btn btn-secondary px-4" data-bs-dismiss="modal">Tutup</button>
+                        <button class="btn btn-success px-4 shadow-sm" id="btn-save-kor" onclick="window.saveKoreksi()">Simpan Perubahan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalKatrol" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning"><h5 class="modal-title">Katrol Nilai Massal</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Tambahkan Nilai (+)</label>
+                            <input type="number" id="katrol-value" class="form-control form-control-lg text-center" value="0">
+                            <small class="text-muted mt-2 d-block">Nilai ini akan ditambahkan ke semua siswa yang sedang tampil di tabel filter saat ini.</small>
+                        </div>
+                        <button class="btn btn-primary w-100 fw-bold" onclick="window.applyKatrolMassal()">Terapkan Katrol Sekarang</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      ` }} />
+    </>
+  );
+}
