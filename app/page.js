@@ -19,9 +19,10 @@ export default function Page() {
       }
 
       const $ = window.jQuery;
+      const LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
 
       // ==========================================
-      // PROXY API: PENGGANTI GOOGLE.SCRIPT.RUN (DENGAN ANTI-CRASH)
+      // PROXY API: PENGGANTI GOOGLE.SCRIPT.RUN (ANTI-MACET & SINKRON TURSO)
       // ==========================================
       window.google = {
         script: {
@@ -34,22 +35,29 @@ export default function Page() {
                 return function (fn) { target.failureFn = fn; return new Proxy(target, this); }.bind(this);
               }
               return function (...args) {
+                // Eksekusi Fetch ke Backend Vercel
                 fetch("/api/cbt", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ action: prop, args: args }),
                 })
                   .then(async (r) => {
+                     // Tangkap HTTP Error agar tidak macet loading
                      if (!r.ok) {
                          const txt = await r.text();
                          throw new Error(`Server Error (${r.status}): ${txt}`);
                      }
                      return r.json();
                   })
-                  .then((res) => { if (target.successFn) target.successFn(res); })
+                  .then((res) => { 
+                      if (target.successFn) target.successFn(res); 
+                  })
                   .catch((err) => { 
                       console.error("API Fetch Error:", err);
+                      // Matikan loading jika gagal
+                      window.showLoad(false);
                       if (target.failureFn) target.failureFn(err); 
+                      else window.Swal.fire("Koneksi Gagal", "Terjadi kesalahan saat menghubungi database Turso: " + err.message, "error");
                   });
               };
             },
@@ -76,7 +84,6 @@ export default function Page() {
       let isExamFinished = false;
       let violationLock = false;
       
-      const LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       let finalBeepOsc = null;
       let beepInterval = null;
@@ -176,10 +183,12 @@ export default function Page() {
                   localStorage.setItem('cbt_user', JSON.stringify(user));
                   $('#logo-container img').attr('src', LOGO_BARU);
                   window.initDash();
-              } else window.Swal.fire('Gagal', res.msg, 'error');
+              } else {
+                  window.Swal.fire('Gagal', res.msg, 'error');
+              }
           }).withFailureHandler(err => {
               window.showLoad(false); 
-              window.Swal.fire('Error', 'Koneksi ke server gagal. ' + err.message, 'error');
+              window.Swal.fire('Error', 'Koneksi ke server gagal. Cek koneksi Turso: ' + err.message, 'error');
           }).loginUser($('#u-login').val(), $('#p-login').val());
       }
 
@@ -190,7 +199,7 @@ export default function Page() {
                   localStorage.removeItem('cbt_user'); localStorage.removeItem('cbt_active_exam'); user = null;
                   clearInterval(timerInt); clearInterval(monitorInterval); clearInterval(autosaveInterval); activeExamId = null;
                   $('#view-dashboard').addClass('hidden'); $('#view-exam').addClass('hidden'); $('body').removeClass('exam-mode');
-                  $('#u-login').val(''); $('#p-login').val(''); $('#view-auth').show(); 
+                  $('#u-login').val(''); $('#p-login').val(''); $('#view-auth').css('display', 'flex'); 
                   $('#sidebar').removeClass('active'); $('#sidebar-overlay').removeClass('active');
               }
           });
@@ -1042,7 +1051,6 @@ export default function Page() {
 
       function editUser(s){ const u=JSON.parse(decodeURIComponent(s)); $('#modalUser').modal('show'); $('#mu-id').val(u.ID); $('#mu-nama').val(u.Nama); $('#mu-user').val(u.Username); $('#mu-pass').val(u.Password); $('#mu-role').val(u.Role); $('#mu-kelas').val(u.Kelas); $('#mu-sekolah').val(u.Sekolah); }
       
-      // PERBAIKAN: Fungsi simpan user dengan response handling yg benar
       function saveUser(e){ 
           if (e) e.preventDefault(); 
           const d={id:$('#mu-id').val(), nama:$('#mu-nama').val(), username:$('#mu-user').val(), password:$('#mu-pass').val(), role:$('#mu-role').val(), kelas:$('#mu-kelas').val(), sekolah:$('#mu-sekolah').val()}; 
@@ -1117,11 +1125,11 @@ export default function Page() {
       window.playBeep = playBeep; window.stopContinuousBeep = stopContinuousBeep; window.applyMathJax = applyMathJax;
       window.checkResumeExam = checkResumeExam; window.toggleSidebar = toggleSidebar; window.showLoad = showLoad; window.toast = toast;
       
-      // PERBAIKAN: Fungsi Handle Login Lebih Aman dan Responsif 
+      // ANTI-MACET: Handle Login
       window.handleLogin = function() {
           try {
               if (!window.Swal || !window.jQuery) {
-                  alert('Sistem sedang memuat komponen penting, mohon tunggu beberapa detik lalu coba lagi.');
+                  alert('Sistem sedang memuat komponen penting, mohon tunggu...');
                   return;
               }
               handleLogin();
@@ -1177,7 +1185,6 @@ export default function Page() {
     initApp();
   }, []);
 
-  // CEGAH VERCEL CRASH (HYDRATION MISMATCH)
   if (!isMounted) return null;
 
   return (
