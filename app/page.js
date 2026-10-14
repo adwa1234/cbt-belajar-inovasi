@@ -1,26 +1,21 @@
 "use client";
 
-import Script from "next/script";
 import { useEffect, useState } from "react";
+import Script from "next/script";
 
 export default function Page() {
   const [isMounted, setIsMounted] = useState(false);
 
-  // Mencegah Vercel Crash (Hydration Mismatch)
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!isMounted) return; // Tunggu HTML selesai dirender
+    if (!isMounted) return;
     if (typeof window === "undefined" || window.appInitialized) return;
     window.appInitialized = true;
 
-    const LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
-
-    // =================================================================
-    // 1. DEKLARASI STATE GLOBAL
-    // =================================================================
+    window.LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
     window.examSubmitting = false;
     window.user = null;
     window.gData = {};
@@ -41,9 +36,7 @@ export default function Page() {
     let finalBeepOsc = null;
     let beepInterval = null;
 
-    // =================================================================
-    // 2. FUNGSI NATIVE & UI (ANTI MACET)
-    // =================================================================
+    // --- FUNGSI UI ---
     window.showLoad = function(show) {
         const loader = document.getElementById('loader');
         if (loader) {
@@ -56,7 +49,6 @@ export default function Page() {
         const p = document.getElementById('p-login');
         const icon = document.getElementById('togglePassword');
         if (!p || !icon) return;
-        
         if (p.type === 'password') {
             p.type = 'text';
             icon.classList.remove('fa-eye');
@@ -78,9 +70,7 @@ export default function Page() {
         else alert(title);
     };
 
-    // =================================================================
-    // 3. PROXY API (PENGHUBUNG KE TURSO - DIJAMIN STABIL)
-    // =================================================================
+    // --- PROXY FETCH API ---
     window.google = {
       script: {
         get run() {
@@ -117,9 +107,7 @@ export default function Page() {
       }
     };
 
-    // =================================================================
-    // 4. LOGIKA HALAMAN (LOGIN, LOGOUT, LOAD PAGE)
-    // =================================================================
+    // --- LOGIKA HALAMAN ---
     window.handleLogin = async function() {
         const u = document.getElementById('u-login').value;
         const p = document.getElementById('p-login').value;
@@ -139,21 +127,18 @@ export default function Page() {
                 body: JSON.stringify({ action: "loginUser", args: [u, p] })
             });
 
-            if (!res.ok) {
-                const txt = await res.text();
-                throw new Error(txt);
-            }
+            if (!res.ok) throw new Error(await res.text());
 
             const data = await res.json();
             window.showLoad(false);
 
             if (data.status === 'success') {
                 window.user = data.data;
-                window.user.LogoUrl = LOGO_BARU;
+                window.user.LogoUrl = window.LOGO_BARU;
                 localStorage.setItem('cbt_user', JSON.stringify(window.user));
                 
                 const logoEl = document.querySelector('#logo-container img');
-                if(logoEl) logoEl.src = LOGO_BARU;
+                if(logoEl) logoEl.src = window.LOGO_BARU;
                 
                 window.initDash();
             } else {
@@ -170,11 +155,12 @@ export default function Page() {
     window.initDash = function() {
         if(!window.user) return;
         
-        const authView = document.getElementById('view-auth');
+        document.getElementById('view-auth').style.display = 'none'; 
         const dashView = document.getElementById('view-dashboard');
-        
-        if(authView) authView.style.display = 'none'; 
-        if(dashView) dashView.classList.remove('hidden'); 
+        if(dashView) {
+            dashView.classList.remove('hidden');
+            dashView.style.display = 'flex'; // Paksa tampil
+        }
         
         const uNameDisp = document.getElementById('u-name-disp');
         if(uNameDisp) uNameDisp.innerText = window.user.Nama;
@@ -221,10 +207,7 @@ export default function Page() {
         if(window.stopContinuousBeep) window.stopContinuousBeep();
         
         const $ = window.jQuery;
-        if(!$) {
-            setTimeout(() => window.loadPage(page), 200);
-            return;
-        }
+        if(!$) { setTimeout(() => window.loadPage(page), 200); return; }
 
         $('#view-exam').addClass('hidden'); 
         $('#view-dashboard').removeClass('hidden'); 
@@ -247,18 +230,16 @@ export default function Page() {
                 window.showLoad(false);
                 if(r.status === 'success') window.renderUsers(r.data); 
                 else if(window.Swal) window.Swal.fire('Error', r.msg, 'error');
-            }).withFailureHandler(e => { 
-                window.showLoad(false); 
-                if(window.Swal) window.Swal.fire('Error', e.message, 'error'); 
-            }).getUserList(window.user.Role, window.user.ID, window.user.Kelas);
+            }).withFailureHandler(e => { window.showLoad(false); if(window.Swal) window.Swal.fire('Error', e.message, 'error'); }).getUserList(window.user.Role, window.user.ID, window.user.Kelas);
             return;
         }
         if(page === 'hasil-rekap') {
-            $('#content-area').html('<div class="text-center p-5"><div class="spinner"></div></div>');
+            window.showLoad(true);
             window.google.script.run.withSuccessHandler(r => {
+                window.showLoad(false);
                 if(r.status === 'success') { window.recapAllData = r.data; window.renderRecapTable(); }
-                else $('#content-area').html(`<div class="alert alert-danger">${r.msg}</div>`);
-            }).withFailureHandler(e => { if(window.Swal) window.Swal.fire('Error', e.message, 'error'); }).getRecapList(window.user.Role, window.user.ID, window.user.Kelas);
+                else { $('#content-area').html(`<div class="alert alert-danger">${r.msg}</div>`); }
+            }).withFailureHandler(e => { window.showLoad(false); if(window.Swal) window.Swal.fire('Error', e.message, 'error'); }).getRecapList(window.user.Role, window.user.ID, window.user.Kelas);
             return;
         }
         if(page === 'guru-monitoring') { window.renderMonitoring(); return; }
@@ -276,7 +257,7 @@ export default function Page() {
         window.google.script.run.withSuccessHandler(res => {
             window.showLoad(false);
             if (res.status === 'success') { window.gData = res.data; window.renderContent(page); if(window.applyMathJax) window.applyMathJax(); } 
-            else if(window.Swal) window.Swal.fire('Error', res.msg, 'error');
+            else if(window.Swal) { window.Swal.fire('Error', res.msg, 'error'); }
         }).withFailureHandler(e => { window.showLoad(false); if(window.Swal) window.Swal.fire('Error', e.message || 'Gagal memuat dashboard', 'error'); }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas);
     };
 
@@ -289,6 +270,7 @@ export default function Page() {
             const $ = window.jQuery;
             if($) {
                 $('#view-dashboard').addClass('hidden'); 
+                $('#view-dashboard').hide(); 
                 $('#view-exam').addClass('hidden'); 
                 $('body').removeClass('exam-mode');
                 $('#sidebar').removeClass('active'); 
@@ -309,25 +291,28 @@ export default function Page() {
         }
     };
 
-    // =================================================================
-    // 5. SEMUA FUNGSI UJIAN, CBT & KOMPONEN TAMBAHAN
-    // =================================================================
+    // --- FUNGSI RENDER DASHBOARD ---
     window.renderContent = function(page) {
         try {
             const $ = window.jQuery; if(!$) return;
             const area = $('#content-area'); let h = '';
             
             if (page === 'admin-home') {
-                const tSiswa = window.gData?.stats?.totalSiswa || 0; const tUjian = window.gData?.stats?.totalUjian || 0;
+                const tSiswa = window.gData?.stats?.totalSiswa || 0;
+                const tUjian = window.gData?.stats?.totalUjian || 0;
                 h = `<div class="row g-4"><div class="col-md-4"><div class="card p-3 shadow-sm border-0 border-start border-4 border-primary"><h3>${tSiswa}</h3><small>Siswa di Kelas Anda</small></div></div><div class="col-md-4"><div class="card p-3 shadow-sm border-0 border-start border-4 border-success"><h3>${tUjian}</h3><small>Total Ujian</small></div></div></div>`;
             }
             else if (page === 'admin-ujian') {
                 let exams = window.gData?.exams || [];
                 let uniqueMapel = [...new Set(exams.map(e => e.Mapel))];
                 let uniqueKelas = [...new Set(exams.map(e => String(e.TargetKelas).trim()))];
+                
                 h = `<div class="d-flex justify-content-between mb-3"><button class="btn btn-primary shadow-sm" onclick="window.openExamModal()">+ Buat Jadwal Baru</button>
-                     <div class="d-flex gap-2"><select id="filter-mapel-ujian" class="form-select form-select-sm" onchange="window.filterAdminUjian()"><option value="">Semua Mapel</option>${uniqueMapel.map(m=>`<option value="${m}">${m}</option>`).join('')}</select>
-                     <select id="filter-kelas-ujian" class="form-select form-select-sm" onchange="window.filterAdminUjian()"><option value="">Semua Kelas</option>${uniqueKelas.map(k=>`<option value="${k}">${k}</option>`).join('')}</select></div></div><div class="row g-4" id="admin-ujian-list">`;
+                     <div class="d-flex gap-2">
+                        <select id="filter-mapel-ujian" class="form-select form-select-sm" onchange="window.filterAdminUjian()"><option value="">Semua Mapel</option>${uniqueMapel.map(m=>`<option value="${m}">${m}</option>`).join('')}</select>
+                        <select id="filter-kelas-ujian" class="form-select form-select-sm" onchange="window.filterAdminUjian()"><option value="">Semua Kelas</option>${uniqueKelas.map(k=>`<option value="${k}">${k}</option>`).join('')}</select>
+                     </div></div><div class="row g-4" id="admin-ujian-list">`;
+                
                 exams.forEach(e => {
                     const isOwner = (String(window.user.Role).trim().toLowerCase() === 'admin' || String(e.PembuatID) === String(window.user.ID));
                     const actionButtons = isOwner ? `<button class="btn btn-sm btn-outline-dark flex-fill" onclick="window.openExamModal('${encodeURIComponent(JSON.stringify(e))}')">Edit</button> <button class="btn btn-sm btn-outline-primary flex-fill" onclick="window.manageQ('${e.ExamID}')"><i class="fas fa-list me-1"></i> Soal</button> <button class="btn btn-sm btn-danger" onclick="window.delExam('${e.ExamID}')"><i class="fas fa-trash"></i></button>` : `<div class="alert alert-light small m-0 p-1 text-center w-100">Read Only</div>`;
@@ -336,7 +321,9 @@ export default function Page() {
                 h += '</div>';
             }
             else if (page === 'siswa-home') {
-                let availExams = window.gData?.availableExams || []; let historyData = window.gData?.history || [];
+                let availExams = window.gData?.availableExams || [];
+                let historyData = window.gData?.history || [];
+                
                 h = `<div class="card mb-4 border-0 shadow-sm bg-primary text-white"><div class="card-body"><h5 class="fw-bold">Halo, ${window.user.Nama}</h5></div></div><h5 class="fw-bold mb-3 border-bottom pb-2 text-primary">Ujian Aktif</h5><div class="row g-4 mb-5">`;
                 if(availExams.length === 0) { h += '<div class="col-12"><div class="alert alert-info text-center">Tidak ada ujian aktif saat ini.</div></div>'; } 
                 else {
@@ -355,13 +342,15 @@ export default function Page() {
                     h += `</tbody></table></div>`;
                 }
             }
-            area.html(h);
+            if($) area.html(h);
         } catch (err) {
             console.error("Render Content Error: ", err);
-            const $ = window.jQuery; if($) $('#content-area').html(`<div class="alert alert-danger">Sistem memproses data... Harap muat ulang halaman.</div>`);
+            const $ = window.jQuery;
+            if($) $('#content-area').html(`<div class="alert alert-danger">Sistem sedang memproses data... Harap muat ulang halaman.</div>`);
         }
     };
 
+    // --- SISANYA ADALAH FUNGSI SISTEM ---
     window.playBeep = function(times, continuous = false) {
         if(audioCtx.state === 'suspended') audioCtx.resume();
         if (continuous) {
@@ -388,21 +377,6 @@ export default function Page() {
         if (beepInterval) { clearTimeout(beepInterval); beepInterval = null; }
     };
 
-    const MathButton = function (context) {
-        const ui = window.jQuery.summernote.ui;
-        const button = ui.button({
-            contents: '<i class="fas fa-square-root-alt"></i> Rumus', tooltip: 'Tambahkan Rumus Matematika (LaTeX)',
-            click: function () {
-                window.Swal.fire({
-                    title: 'Editor Rumus (LaTeX)', html: `<div class="text-start small mb-2 text-muted">Ketik format LaTeX manual:</div><textarea id="swal-math-input" class="form-control font-monospace" rows="3"></textarea>`,
-                    showCancelButton: true, confirmButtonText: 'Sisipkan Rumus'
-                }).then((result) => { if (result.isConfirmed) { const mathText = window.jQuery('#swal-math-input').val(); if(mathText) context.invoke('editor.insertText', ` $$ ${mathText} $$ `); } });
-            }
-        });
-        return button.render();
-    };
-
-    window.snConfig = { height: 180, toolbar: [['style', ['bold', 'italic', 'underline', 'clear']], ['para', ['ul', 'ol']], ['insert', ['picture', 'table', 'link', 'math']]], buttons: { math: MathButton } };
     window.applyMathJax = function() { if (window.MathJax && window.MathJax.typesetPromise) window.MathJax.typesetPromise().catch(()=>{}); };
 
     window.checkResumeExam = function() {
@@ -937,13 +911,14 @@ export default function Page() {
     window.handleFullscreenChange = function() { if (!window.isExamFinished && !document.fullscreenElement) { window.triggerViolation("Anda keluar dari mode fullscreen!"); try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} } };
 
     window.triggerViolation = function(msg) {
-        if(window.violationLock || window.isExamFinished) return; window.violationLock = true; window.violationCount++; const $ = window.jQuery; if($) $('#viol-disp').text(window.violationCount);
+        if(window.violationLock || window.isExamFinished) return; window.violationLock = true; window.violationCount++; 
+        const $ = window.jQuery; if($) $('#viol-disp').text(window.violationCount);
         if (window.violationCount >= window.activeExamViolations) { window.playBeep(0, true); window.isExamFinished = true; window.submitExamButton(true); } 
         else { window.playBeep(window.violationCount, false); if(window.Swal) { window.Swal.fire({ icon: 'warning', title: 'PERINGATAN PELANGGARAN!', text: `${msg} (${window.violationCount}/${window.activeExamViolations})`, confirmButtonText: 'KEMBALI KE UJIAN', allowOutsideClick: false }).then(() => { window.violationLock = false; try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} }); } }
     };
 
     window.runExam = function(qs, dur, isResume) {
-        const $ = window.jQuery; if(!$) return;
+        const $= window.jQuery; if(!$) return;
         $('#view-dashboard').addClass('hidden'); $('#view-exam').removeClass('hidden'); $('body').addClass('exam-mode');
         const c = $('#q-slides-container'); const g = $('#nav-grid'); c.empty(); g.empty();
         qs.forEach((q,i) => {
@@ -1177,28 +1152,27 @@ export default function Page() {
 
     window.filterTable = function(tid, q) { const $ = window.jQuery; if(!$) return; const f=q.toLowerCase();$(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); };
 
-    // =================================================================
-    // 6. JALANKAN INISIALISASI AUTO-LOGIN
-    // =================================================================
-    const savedUser = localStorage.getItem('cbt_user');
-    if(savedUser) {
-        window.user = JSON.parse(savedUser);
-        setTimeout(() => {
+    // ==========================================
+    // 5. PENGECEKAN SESI (AUTO-LOGIN)
+    // ==========================================
+    const checkAutoLogin = () => {
+        const savedUser = localStorage.getItem('cbt_user');
+        if(savedUser) {
+            window.user = JSON.parse(savedUser);
             const logoEl = document.querySelector('#logo-container img');
-            if (logoEl) logoEl.src = window.user.LogoUrl || window.LOGO_BARU;
+            if (logoEl) logoEl.src = window.user.LogoUrl || LOGO_BARU;
             window.initDash();
             if(window.checkResumeExam) window.checkResumeExam();
-        }, 300);
-    } else {
-        setTimeout(() => {
-            const authView = document.getElementById('view-auth');
-            if (authView) authView.style.display = 'flex';
-        }, 100);
-    }
+        } else {
+            window.showLoad(false);
+        }
+    };
+
+    checkAutoLogin();
 
   }, [isMounted]);
 
-  // Tampilkan layar loading polos sebentar agar Vercel tidak mendeteksi bentrok Hydration HTML
+  // Hindari Hydration Mismatch
   if (!isMounted) return <div style={{ width: '100vw', height: '100vh', backgroundColor: '#f1f5f9' }} />;
 
   return (
@@ -1225,7 +1199,7 @@ export default function Page() {
               --accent: #84cc16; 
               --bg-body: #faf5ff; 
           }
-          body { font-family: 'Poppins', sans-serif; background-color: var(--bg-body); color: #1e293b; overflow-x: hidden; margin: 0; }
+          body { font-family: 'Poppins', sans-serif; background-color: var(--bg-body); color: #1e293b; overflow-x: hidden; }
           body.exam-mode { overflow: hidden; user-select: none; }
           .hidden { display: none !important; }
           .q-content img, .opt-content img { max-width: 100% !important; height: auto !important; border-radius: 6px; margin: 5px 0; }
@@ -1295,7 +1269,7 @@ export default function Page() {
           #content-area { flex: 1; }
         </style>
 
-        <div id="loader" class="loader hidden"><div class="spinner"></div></div>
+        <div id="loader" class="loader"><div class="spinner"></div></div>
         <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
         
         <!-- LAYAR LOGIN SPLIT -->
@@ -1316,7 +1290,7 @@ export default function Page() {
                         <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
                         <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
                     </div>
-                    <!-- Form Native Prevent Default -->
+                    <!-- Form Native Submit -->
                     <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;">
                         <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
                         <div class="form-floating mb-4 position-relative">
@@ -1331,6 +1305,7 @@ export default function Page() {
             <div class="auth-footer">© 2026 BELAJAR INOVASI</div>
         </div>
 
+        <!-- LAYAR DASHBOARD UTAMA -->
         <div id="view-dashboard" class="hidden wrapper">
             <nav id="sidebar">
                 <div class="sidebar-header d-flex align-items-center justify-content-between p-3 border-bottom border-secondary">
