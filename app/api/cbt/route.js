@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { turso } from "@/lib/turso"; // Gunakan "../../../lib/turso" jika terjadi error module not found
+import { turso } from "@/lib/turso"; 
 
 export async function POST(req) {
   try {
@@ -27,7 +27,11 @@ export async function POST(req) {
         `);
 
         // [AUTO-SETUP] 2. Buat akun Admin default jika database masih kosong
-        const checkAdmin = await turso.execute("SELECT * FROM Users WHERE Username = 'admin'");
+        const checkAdmin = await turso.execute({
+          sql: "SELECT * FROM Users WHERE Username = ?",
+          args: ["admin"]
+        });
+        
         if (checkAdmin.rows.length === 0) {
            await turso.execute({
               sql: "INSERT INTO Users (ID, Nama, Username, Password, Role, Sekolah, Kelas) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -54,7 +58,7 @@ export async function POST(req) {
       } catch (dbError) {
         return NextResponse.json({ 
           status: "error", 
-          msg: "Koneksi Turso Gagal: " + dbError.message 
+          msg: "Gagal membaca Database: " + dbError.message 
         });
       }
     }
@@ -67,13 +71,8 @@ export async function POST(req) {
       const cleanRole = String(role).trim().toLowerCase();
 
       try {
-        // Pastikan tabel Exams & Results dibuat jika belum ada agar dashboard tidak crash
-        await turso.execute(`
-          CREATE TABLE IF NOT EXISTS Exams (ExamID TEXT PRIMARY KEY, Judul TEXT, Mapel TEXT, TargetKelas TEXT, Durasi INTEGER, Status TEXT, Token TEXT, StartDate TEXT, EndDate TEXT, LimitTries INTEGER, ShowStats TEXT, RandomQ TEXT, PembuatID TEXT, MaxViolations INTEGER)
-        `);
-        await turso.execute(`
-          CREATE TABLE IF NOT EXISTS Results (ResultID TEXT PRIMARY KEY, SiswaID TEXT, ExamID TEXT, TotalNilai REAL, Detail TEXT, Pelanggaran TEXT, WaktuSubmit DATETIME DEFAULT CURRENT_TIMESTAMP)
-        `);
+        await turso.execute(`CREATE TABLE IF NOT EXISTS Exams (ExamID TEXT PRIMARY KEY, Judul TEXT, Mapel TEXT, TargetKelas TEXT, Durasi INTEGER, Status TEXT, Token TEXT, StartDate TEXT, EndDate TEXT, LimitTries INTEGER, ShowStats TEXT, RandomQ TEXT, PembuatID TEXT, MaxViolations INTEGER)`);
+        await turso.execute(`CREATE TABLE IF NOT EXISTS Results (ResultID TEXT PRIMARY KEY, SiswaID TEXT, ExamID TEXT, TotalNilai REAL, Detail TEXT, Pelanggaran TEXT, WaktuSubmit DATETIME DEFAULT CURRENT_TIMESTAMP)`);
 
         const examsRes = await turso.execute("SELECT * FROM Exams");
         const usersRes = await turso.execute("SELECT * FROM Users WHERE Role = 'siswa'");
@@ -92,11 +91,7 @@ export async function POST(req) {
         }
 
         if (cleanRole === "admin" || cleanRole === "guru") {
-          output.stats = {
-            totalSiswa: users.length,
-            totalUjian: exams.length,
-            activeUjian: exams.filter(e => e.Status === 'Aktif').length
-          };
+          output.stats = { totalSiswa: users.length, totalUjian: exams.length, activeUjian: exams.filter(e => e.Status === 'Aktif').length };
           output.exams = exams;
         } else if (cleanRole === "siswa") {
           const historyRes = await turso.execute({ sql: "SELECT * FROM Results WHERE SiswaID = ?", args: [userId] });
@@ -106,12 +101,12 @@ export async function POST(req) {
 
         return NextResponse.json({ status: "success", data: output });
       } catch (err) {
-        return NextResponse.json({ status: "error", msg: "Gagal memuat dashboard: " + err.message });
+        return NextResponse.json({ status: "error", msg: "Dashboard Error: " + err.message });
       }
     }
     
     // ==========================================
-    // 3. GET USER LIST & LAINNYA
+    // 3. FUNGSI LAINNYA
     // ==========================================
     else if (action === "getUserList") {
         const usersRes = await turso.execute("SELECT * FROM Users");
