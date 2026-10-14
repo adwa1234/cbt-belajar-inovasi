@@ -1,12 +1,15 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function Page() {
+  const [isMounted, setIsMounted] = useState(false);
+
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.appInitialized) return;
+    setIsMounted(true); // Cegah error crash "Page couldn't load" di Vercel
+
+    if (typeof window === "undefined" || window.appInitialized) return;
     window.appInitialized = true;
 
     const initApp = () => {
@@ -17,9 +20,7 @@ export default function Page() {
 
       const $ = window.jQuery;
 
-      // ==========================================
-      // PROXY API: PENGGANTI GOOGLE.SCRIPT.RUN
-      // ==========================================
+      // PROXY API
       window.google = {
         script: {
           run: new Proxy({}, {
@@ -45,9 +46,7 @@ export default function Page() {
         },
       };
 
-      // ==========================================
       // ORIGINAL JAVASCRIPT LOGIC
-      // ==========================================
       let examSubmitting = false;
       let user = null;
       let gData = {};
@@ -58,13 +57,12 @@ export default function Page() {
       let totalQ = 0;
       let currentQuestionsData = [];
       let currentQIdx = 0;
-      let activeUid = '';
       let recapAllData = [];
       let recapDataStore = {};
       let violationCount = 0;
       let isExamFinished = false;
       let violationLock = false;
-
+      
       const LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       let finalBeepOsc = null;
@@ -114,17 +112,9 @@ export default function Page() {
               click: function () {
                   window.Swal.fire({
                       title: 'Editor Rumus (LaTeX)',
-                      html: `<div class="text-start small mb-2 text-muted">Pilih template cepat atau ketik format LaTeX secara manual:</div>
-                             <div class="d-flex flex-wrap gap-1 mb-3">
-                               <button class="btn btn-sm btn-outline-secondary" onclick="$('#swal-math-input').val($('#swal-math-input').val() + '\\\\frac{a}{b}')">Pecahan (a/b)</button>
-                               <button class="btn btn-sm btn-outline-secondary" onclick="$('#swal-math-input').val($('#swal-math-input').val() + 'x^{2}')">Pangkat</button>
-                               <button class="btn btn-sm btn-outline-secondary" onclick="$('#swal-math-input').val($('#swal-math-input').val() + '\\\\sqrt{x}')">Akar</button>
-                               <button class="btn btn-sm btn-outline-secondary" onclick="$('#swal-math-input').val($('#swal-math-input').val() + '\\\\sum')">Sigma</button>
-                             </div>
-                             <textarea id="swal-math-input" class="form-control font-monospace" rows="3" placeholder="Ketik rumus LaTeX di sini..."></textarea>`,
-                      showCancelButton: true,
-                      confirmButtonText: 'Sisipkan Rumus',
-                      cancelButtonText: 'Batal'
+                      html: `<div class="text-start small mb-2 text-muted">Ketik format LaTeX manual:</div>
+                             <textarea id="swal-math-input" class="form-control font-monospace" rows="3"></textarea>`,
+                      showCancelButton: true, confirmButtonText: 'Sisipkan Rumus'
                   }).then((result) => {
                       if (result.isConfirmed) {
                           const mathText = $('#swal-math-input').val();
@@ -204,12 +194,12 @@ export default function Page() {
           else { window.Swal.fire('Akses Ditolak', 'Role akun Anda tidak dikenali sistem.', 'error'); }
       }
 
-      // FIX: Regex Refresh
       function appRefresh() {
           const activeLink = $('.nav-link.active');
           if (activeLink.length > 0) {
               const onclickAttr = activeLink.attr('onclick');
               if(onclickAttr) { 
+                  // Perbaikan regex tombol refresh
                   const match = onclickAttr.match(/'([^']+)'/); 
                   if(match && match[1]) window.loadPage(match[1]); 
               }
@@ -528,20 +518,20 @@ export default function Page() {
               h += '</div>';
           }
           else if (page === 'siswa-home') {
-              h = `<div class="card mb-4 border-0 shadow-sm bg-primary text-white"><div class="card-body"><h5 class="fw-bold">Halo, ${user.Nama}</h5></div></div><h5 class="fw-bold mb-3 border-bottom pb-2">Ujian Aktif</h5><div class="row g-4 mb-5">`;
+              h = `<div class="card mb-4 border-0 shadow-sm bg-primary text-white"><div class="card-body"><h5 class="fw-bold">Halo, ${user.Nama}</h5></div></div><h5 class="fw-bold mb-3 border-bottom pb-2 text-primary">Ujian Aktif</h5><div class="row g-4 mb-5">`;
               if(!gData.availableExams || gData.availableExams.length === 0) { h += '<div class="col-12"><div class="alert alert-info text-center">Tidak ada ujian aktif saat ini.</div></div>'; } 
               else {
                   gData.availableExams.forEach(e => {
                       let btnState = '', btnText = 'MULAI UJIAN', btnClass = 'btn-primary';
                       if (e.IsFinished) { btnState = 'disabled'; btnText = 'SUDAH DIKERJAKAN / BATAS HABIS'; btnClass = 'btn-secondary'; }
                       else if (e.IsExpired) { btnState = 'disabled'; btnText = 'WAKTU HABIS'; btnClass = 'btn-danger'; }
-                      h += `<div class="col-md-6 col-lg-4"><div class="card h-100 shadow-sm border-0"><div class="card-body"><h5 class="fw-bold text-primary">${e.Judul}</h5><div class="mb-2"><span class="badge bg-info">${e.Mapel}</span> <span class="badge bg-light text-dark border">${e.Durasi} Menit</span></div><button class="btn ${btnClass} w-100 fw-bold shadow-sm" onclick="window.startExam('${e.ExamID}')" ${btnState}>${btnText}</button></div></div></div>`;
+                      h += `<div class="col-md-6 col-lg-4"><div class="card h-100 shadow-sm border-0"><div class="card-body"><h5 class="fw-bold text-primary">${e.Judul}</h5><div class="mb-2"><span class="badge bg-primary">${e.Mapel}</span> <span class="badge bg-light text-dark border">${e.Durasi} Menit</span></div><button class="btn ${btnClass} w-100 fw-bold shadow-sm" onclick="window.startExam('${e.ExamID}')" ${btnState}>${btnText}</button></div></div></div>`;
                   });
               }
-              h += '</div><h5 class="fw-bold mb-3 border-bottom pb-2 mt-4"><i class="fas fa-history me-2"></i>Riwayat</h5>';
+              h += '</div><h5 class="fw-bold mb-3 border-bottom pb-2 mt-4 text-primary"><i class="fas fa-history me-2"></i>Riwayat</h5>';
               if(!gData.history || gData.history.length === 0) { h += '<p class="text-muted fst-italic">Belum ada riwayat.</p>'; } 
               else {
-                  h += `<div class="table-responsive bg-white rounded shadow-sm p-3"><table class="table table-hover align-middle mb-0"><thead><tr><th>Tanggal</th><th>Ujian</th><th>Nilai</th><th>Status</th></tr></thead><tbody>`;
+                  h += `<div class="table-responsive bg-white rounded shadow-sm p-3"><table class="table table-hover align-middle mb-0"><thead><tr class="table-light"><th>Tanggal</th><th>Ujian</th><th>Nilai</th><th>Status</th></tr></thead><tbody>`;
                   gData.history.forEach(r => { h += `<tr><td>${r.WaktuSubmit}</td><td><div class="fw-bold">${r.Judul}</div></td><td><span class="badge bg-warning text-dark">${r.Nilai}</span></td><td><span class="badge bg-success">Selesai</span></td></tr>`; });
                   h += `</tbody></table></div>`;
               }
@@ -571,22 +561,72 @@ export default function Page() {
           $('#modalExam form')[0].reset(); $('#ex-id').val(''); $('#ex-token').val('');
           $('#ex-violations').val(3); $('#ex-limit').val(1);
         }
-        $('#kelas-container').html(`<input type="text" name="targetKelas" id="ex-kelas" class="form-control" placeholder="Contoh: 7A, 7B" value="${d ? d.TargetKelas : ''}" required>`);
+
+        const role = String(user.Role).trim().toLowerCase();
+        const container = $('#kelas-container');
+
+        if (role === 'guru') {
+          const kelasArr = String(user.Kelas).split(',').map(k => k.trim()).filter(k => k);
+          let selectedKelas = d ? String(d.TargetKelas).split(',').map(k => k.trim()) : kelasArr;
+
+          let htmlKelas = `<div class="d-flex flex-wrap gap-2 mt-2">`;
+          kelasArr.forEach(k => {
+            const isChecked = selectedKelas.includes(k) ? 'checked' : '';
+            htmlKelas += `<div class="form-check"><input class="form-check-input kls-cb" type="checkbox" value="${k}" id="cb-${k}" ${isChecked}><label class="form-check-label small" for="cb-${k}">${k}</label></div>`;
+          });
+          htmlKelas += `</div><input type="hidden" name="targetKelas" id="ex-kelas-hidden">`;
+          
+          container.html(htmlKelas);
+        } else {
+          let valKelas = d ? d.TargetKelas : '';
+          container.html(`<input type="text" name="targetKelas" id="ex-kelas" class="form-control" placeholder="Contoh: 7A, 7B" value="${valKelas}" required>`);
+        }
       }
 
       function saveExam() {
-        const d = Object.fromEntries(new FormData(document.getElementById('frm-exam')).entries());
+        const formEl = document.getElementById('frm-exam'); 
+        const fd = new FormData(formEl); 
+        const d = Object.fromEntries(fd.entries());
+
+        if (String(user.Role).trim().toLowerCase() === 'guru') {
+          let selectedKls = [];
+          $('.kls-cb:checked').each(function() { selectedKls.push($(this).val()); });
+          if (selectedKls.length === 0) return window.Swal.fire('Error', 'Pilih minimal 1 target kelas!', 'error');
+          d.targetKelas = selectedKls.join(', ');
+        }
+
         d.showStats = $('#ex-showStats').is(':checked') ? 'Yes' : 'No'; 
         d.randomQ = $('#ex-randomQ').is(':checked') ? 'Yes' : 'No'; 
+        d.userRole = user.Role; 
+        d.userClass = user.Kelas;
         d.userId = user.ID;
+        
+        if (!d.judul || !d.mapel || !d.start || !d.end || !d.targetKelas) {
+          return window.Swal.fire('Error', 'Lengkapi data!', 'error');
+        }
         
         window.showLoad(true);
         window.google.script.run.withSuccessHandler((res) => {
-          window.showLoad(false); $('#modalExam').modal('hide'); window.toast('success', 'Jadwal Disimpan!'); window.loadPage('admin-ujian');
-        }).adminSaveExam(d);
+          if(res.status === 'success') {
+            $('#modalExam').modal('hide');
+            window.google.script.run.withSuccessHandler(res2 => {
+              window.showLoad(false);
+              if (res2.status === 'success') { 
+                gData = res2.data; 
+                window.renderContent('admin-ujian'); 
+                window.toast('success', 'Jadwal Disimpan!'); 
+              } else {
+                window.Swal.fire('Gagal', res2.msg, 'error');
+              }
+            }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getDashboardData(user.Role, user.ID, user.Kelas);
+          } else { 
+            window.showLoad(false); 
+            window.Swal.fire('Gagal', res.msg, 'error'); 
+          }
+        }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminSaveExam(d);
       }
 
-      function delExam(id){ window.Swal.fire({title:'Hapus Jadwal?', icon:'warning', showCancelButton:true}).then(r=>{if(r.isConfirmed){ window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.showLoad(false); window.loadPage('admin-ujian')}).adminDeleteExam(id); }}) }
+      function delExam(id){ window.Swal.fire({title:'Hapus Jadwal?', icon:'warning', showCancelButton:true}).then(r=>{if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.showLoad(false); window.loadPage('admin-ujian')}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error')}).adminDeleteExam(id, user.ID, user.Role); } }) }
 
       function manageQ(id) { activeExamId = id; $('#modalQ').modal('show'); window.loadQList(); }
 
@@ -661,7 +701,7 @@ export default function Page() {
           } else {
               inp = `<textarea style="width:100%; padding:15px; border:1px solid #e2e8f0; border-radius:6px; font-family:inherit; resize:vertical;" rows="5" placeholder="Ketik jawaban Anda di sini..."></textarea>`;
           }
-          return `<div style="font-family: 'Poppins', Arial, sans-serif; padding:25px; background:#f8fafc; border-radius:12px; color:#1e293b; border:1px solid #e2e8f0; margin-bottom:20px;"><div style="background:#7e22ce; color:white; display:inline-block; padding:5px 15px; border-radius:15px; font-size:12px; font-weight:bold; margin-bottom:20px; box-shadow:0 2px 4px rgba(126,34,206,0.2);">Soal No. ${q.Nomor||''}</div><div style="margin-bottom:20px; font-size:16px; line-height:1.6; word-wrap: break-word;">${q.Pertanyaan}</div>${inp}</div>`;
+          return `<div style="font-family: 'Poppins', Arial, sans-serif; padding:25px; background:#f8fafc; border-radius:12px; color:#1e293b; border:1px solid #e2e8f0; margin-bottom:20px;"><div style="background:var(--primary); color:white; display:inline-block; padding:5px 15px; border-radius:15px; font-size:12px; font-weight:bold; margin-bottom:20px; box-shadow:0 2px 4px rgba(126,34,206,0.2);">Soal No. ${q.Nomor||''}</div><div style="margin-bottom:20px; font-size:16px; line-height:1.6; word-wrap: break-word;">${q.Pertanyaan}</div>${inp}</div>`;
       }
 
       function previewAllQ() {
@@ -973,8 +1013,22 @@ export default function Page() {
       function redrawMatchLines(qIdx, savedArr, rightItems) { if(!matchState[qIdx]) matchState[qIdx] = { sel: null, pairs: [] }; if(Array.isArray(savedArr)) { matchState[qIdx].pairs = []; savedArr.forEach((val, lIdx) => { if(val) { const rIdx = rightItems.indexOf(val); if(rIdx > -1) { matchState[qIdx].pairs.push({ left: lIdx, right: rIdx, rightVal: val }); } } }); window.drawLines(qIdx); } }
 
       function editUser(s){ const u=JSON.parse(decodeURIComponent(s)); $('#modalUser').modal('show'); $('#mu-id').val(u.ID); $('#mu-nama').val(u.Nama); $('#mu-user').val(u.Username); $('#mu-pass').val(u.Password); $('#mu-role').val(u.Role); $('#mu-kelas').val(u.Kelas); $('#mu-sekolah').val(u.Sekolah); }
-      function saveUser(e){ if (e) e.preventDefault(); const d={id:$('#mu-id').val(), nama:$('#mu-nama').val(), username:$('#mu-user').val(), password:$('#mu-pass').val(), role:$('#mu-role').val(), kelas:$('#mu-kelas').val(), sekolah:$('#mu-sekolah').val()}; window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.showLoad(false);$('#modalUser').modal('hide'); window.loadPage('admin-users')}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminManageUser('save',d); }
-      function delUser(id){ if(confirm('Hapus User?')) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.showLoad(false); window.loadPage('admin-users')}).withFailureHandler(err => window.Swal.fire('Error', err.message, 'error')).adminManageUser('delete',{id:id}); } }
+      
+      // Fungsi Menyimpan User dan Update Tabel Otomatis
+      function saveUser(e){ 
+          if (e) e.preventDefault(); 
+          const d={id:$('#mu-id').val(), nama:$('#mu-nama').val(), username:$('#mu-user').val(), password:$('#mu-pass').val(), role:$('#mu-role').val(), kelas:$('#mu-kelas').val(), sekolah:$('#mu-sekolah').val()}; 
+          window.showLoad(true); 
+          window.google.script.run.withSuccessHandler(()=>{
+              $('#modalUser').modal('hide'); 
+              window.loadPage('admin-users'); 
+          }).withFailureHandler(err => { 
+              window.showLoad(false); 
+              window.Swal.fire('Error', err.message, 'error'); 
+          }).adminManageUser('save',d); 
+      }
+      
+      function delUser(id){ if(confirm('Hapus User?')) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.loadPage('admin-users');}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error')}).adminManageUser('delete',{id:id}); } }
       function handleResetCache() { window.Swal.fire({title:'Reset Cache?', text:"Membersihkan data sementara sistem.", icon:'warning', showCancelButton:true}).then((r)=>{ if(r.isConfirmed){ window.showLoad(true); window.google.script.run.withSuccessHandler(r=>{window.showLoad(false);window.Swal.fire('Sukses',r.msg,'success')}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).sysResetCache(); }}); }
       function deleteResult(rid) { window.Swal.fire({title:'Hapus & Reset Ujian?', text:'Data dihapus, cache/status ujian direset, dan siswa bisa ujian kembali.', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33'}).then(r=>{ if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(res=>{ window.showLoad(false); if(res.status==='success'){ window.Swal.fire('Berhasil',res.msg,'success'); window.loadPage('hasil-rekap'); } else window.Swal.fire('Gagal',res.msg,'error'); }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminDeleteResult(rid); } }); }
 
@@ -1030,7 +1084,7 @@ export default function Page() {
       function filterTable(tid, q) { const f=q.toLowerCase(); $(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); }
 
       // ==========================================
-      // BIND FUNGSI KE WINDOW UNTUK EVENT HANDLER HTML (SANGAT PENTING)
+      // GLOBAL BINDING (SANGAT PENTING UNTUK HTML ONCLICK)
       // ==========================================
       window.playBeep = playBeep; window.stopContinuousBeep = stopContinuousBeep; window.applyMathJax = applyMathJax;
       window.checkResumeExam = checkResumeExam; window.toggleSidebar = toggleSidebar; window.showLoad = showLoad; window.toast = toast;
@@ -1079,6 +1133,9 @@ export default function Page() {
     initApp();
   }, []);
 
+  // CEGAH VERCEL CRASH (HYDRATION MISMATCH)
+  if (!isMounted) return null;
+
   return (
     <>
       <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet" />
@@ -1122,16 +1179,10 @@ export default function Page() {
           .badge.bg-primary { background-color: var(--primary) !important; }
           .badge.bg-success { background-color: var(--accent) !important; }
 
-          /* LAYOUT LOGIN BARU (SPLIT SCREEN) */
-          .auth-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg-body); padding: 20px; }
-          .auth-card-split { display: flex; background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); max-width: 900px; width: 100%; overflow: hidden; z-index: 2; }
-          .auth-left { flex: 1; background: linear-gradient(135deg, rgba(126,34,206,0.95) 0%, rgba(132,204,22,0.95) 100%); color: white; padding: 40px; display: flex; flex-direction: column; justify-content: center; }
-          .auth-right { flex: 1; padding: 40px; display: flex; flex-direction: column; justify-content: center; }
-          @media (max-width: 768px) { .auth-card-split { flex-direction: column; } .auth-left { padding: 30px; text-align: center; } }
-          .auth-left h2 { font-weight: 700; margin-bottom: 15px; }
-          .auth-left p { font-size: 14px; opacity: 0.9; margin-bottom: 20px; }
-          .auth-left ul { list-style: none; padding: 0; margin: 0; }
-          .auth-left ul li { margin-bottom: 15px; font-size: 14px; display: flex; align-items: center; gap: 10px; }
+          /* PERBAIKAN TAMPILAN LOGIN (PENUH 1 HALAMAN TERPUSAT) */
+          .auth-wrapper { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(126,34,206,0.9) 0%, rgba(132,204,22,0.9) 100%); padding: 20px; }
+          .auth-card { background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); width: 100%; max-width: 420px; padding: 40px; z-index: 2; margin-bottom: 15px; }
+          .auth-footer { text-align: center; color: rgba(255,255,255,0.8); font-size: 0.875rem; z-index: 3; }
 
           .wrapper { display: flex; width: 100%; align-items: stretch; position: relative; }
           #sidebar { min-width: 260px; max-width: 260px; background: #3b0764; color: #fff; min-height: 100vh; position: fixed; z-index: 1050; transition: all 0.3s; left: 0; top: 0; }
@@ -1176,35 +1227,25 @@ export default function Page() {
         <div id="loader" class="loader hidden"><div class="spinner"></div></div>
         <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
         
-        <!-- LAYAR LOGIN SPLIT TERBARU -->
-        <div id="view-auth" class="auth-container">
-            <div class="auth-card-split">
-                <div class="auth-left">
-                    <h2>CBT Belajar Inovasi</h2>
-                    <p>Selamat datang di sistem Ujian Berbasis Komputer. Platform ini dirancang untuk memberikan pengalaman ujian yang interaktif, stabil, dan aman.</p>
-                    <ul>
-                        <li><i class="fas fa-bolt fs-5"></i> Sinkronisasi Cepat & Real-Time</li>
-                        <li><i class="fas fa-shield-alt fs-5"></i> Aman dari Kecurangan</li>
-                        <li><i class="fas fa-mobile-alt fs-5"></i> Responsif di Semua Perangkat</li>
-                    </ul>
+        <!-- HALAMAN LOGIN PENUH & TERPUSAT -->
+        <div id="view-auth" class="auth-wrapper">
+            <div class="auth-card">
+                <div class="text-center mb-4">
+                    <img src="https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk" class="mb-3 rounded" width="100" alt="Logo">
+                    <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
+                    <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
                 </div>
-                <div class="auth-right">
-                    <div class="text-center mb-4">
-                        <div id="logo-container"><img src="https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk" class="mb-3 rounded" width="100" alt="Logo"></div>
-                        <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
+                <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;" action="javascript:void(0);">
+                    <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
+                    <div class="form-floating mb-4 position-relative">
+                        <input type="password" id="p-login" class="form-control" placeholder="Pass" required>
+                        <label>Password</label>
+                        <i class="fas fa-eye position-absolute top-50 end-0 translate-middle-y me-3 text-muted icon-eye-login" id="togglePassword"></i>
                     </div>
-                    <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;" action="javascript:void(0);">
-                        <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
-                        <div class="form-floating mb-4 position-relative">
-                            <input type="password" id="p-login" class="form-control" placeholder="Pass" required>
-                            <label>Password</label>
-                            <i class="fas fa-eye position-absolute top-50 end-0 translate-middle-y me-3 text-muted icon-eye-login" id="togglePassword"></i>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">MASUK SEKARANG</button>
-                    </form>
-                </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">MASUK SEKARANG</button>
+                </form>
             </div>
-            <div class="text-center mt-3 text-muted small z-3">© 2026 BELAJAR INOVASI</div>
+            <div class="auth-footer">© 2026 BELAJAR INOVASI</div>
         </div>
 
         <div id="view-dashboard" class="hidden wrapper">
@@ -1218,7 +1259,7 @@ export default function Page() {
                     <li><a onclick="window.loadPage('admin-ujian')" class="nav-link"><i class="fas fa-calendar me-2"></i>Bank Soal</a></li>
                     <li><a onclick="window.loadPage('hasil-rekap')" class="nav-link"><i class="fas fa-chart-bar me-2"></i>Hasil Nilai</a></li>
                     <li><a onclick="window.loadPage('guru-monitoring')" class="nav-link"><i class="fas fa-tv me-2"></i>Monitoring</a></li>
-                    <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
+                    <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link text-info"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
                     <li><a onclick="window.handleResetCache()" class="nav-link text-warning"><i class="fas fa-bolt me-2"></i>Reset Cache</a></li>
                 </ul>
                 <ul class="list-unstyled components hidden" id="menu-guru">
@@ -1227,7 +1268,7 @@ export default function Page() {
                     <li><a onclick="window.loadPage('admin-ujian')" class="nav-link"><i class="fas fa-file-alt me-2"></i>Bank Soal</a></li>
                     <li><a onclick="window.loadPage('hasil-rekap')" class="nav-link"><i class="fas fa-poll me-2"></i>Hasil Nilai</a></li>
                     <li><a onclick="window.loadPage('guru-monitoring')" class="nav-link"><i class="fas fa-desktop me-2"></i>Live Monitor</a></li>
-                    <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
+                    <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link text-info"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
                 </ul>
                 <ul class="list-unstyled components hidden" id="menu-siswa">
                     <li><a onclick="window.loadPage('siswa-home')" class="nav-link active"><i class="fas fa-pencil-alt me-2"></i>Ujian Saya</a></li>
@@ -1342,7 +1383,7 @@ export default function Page() {
                 <div class="modal-content">
                     <div class="modal-header bg-success text-white"><h5 class="modal-title">User Editor</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <form id="frm-user" onsubmit="event.preventDefault(); window.saveUser(); return false;" action="javascript:void(0);">
+                        <form id="frm-user" onsubmit="event.preventDefault(); window.saveUser(event); return false;" action="javascript:void(0);">
                             <input type="hidden" id="mu-id">
                             <input type="text" id="mu-nama" class="form-control mb-2" placeholder="Nama Lengkap" required>
                             <input type="text" id="mu-user" class="form-control mb-2" placeholder="Username" required>
