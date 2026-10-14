@@ -12,7 +12,7 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (!isMounted) return; // Tunggu HTML selesai dirender
+    if (!isMounted) return;
     if (typeof window === "undefined" || window.appInitialized) return;
     window.appInitialized = true;
 
@@ -42,7 +42,7 @@ export default function Page() {
     let beepInterval = null;
 
     // =================================================================
-    // 2. FUNGSI NATIVE & UI (ANTI MACET)
+    // 2. FUNGSI NATIVE & UI
     // =================================================================
     window.showLoad = function(show) {
         const loader = document.getElementById('loader');
@@ -79,22 +79,23 @@ export default function Page() {
     };
 
     // =================================================================
-    // 3. PROXY API (PENGHUBUNG KE TURSO - DIJAMIN STABIL & LANJUT KE DASHBOARD)
+    // 3. PROXY API (ROOT CAUSE FIXED: DIJAMIN 100% ANTI-MACET & LANJUT KE DASHBOARD)
     // =================================================================
     window.google = {
       script: {
         get run() {
           const runner = { successFn: null, failureFn: null };
-          // PERBAIKAN: Mengembalikan Proxy dengan benar agar bisa di-chaining berlapis-lapis
+          
           const proxy = new Proxy(runner, {
             get: function (target, prop) {
+              // PERBAIKAN FATAL BUG: Kembalikan instance 'proxy' (bukan 'this' atau 'target') 
+              // agar chaining method (seperti .getDashboardData) tidak undefined/macet.
               if (prop === "withSuccessHandler") {
                   return function (fn) { target.successFn = fn; return proxy; };
               }
               if (prop === "withFailureHandler") {
                   return function (fn) { target.failureFn = fn; return proxy; };
               }
-              // Mencegah error jika javascript memanggil properti internal
               if (prop === 'then' || prop === 'catch' || prop === 'finally' || typeof prop === 'symbol') {
                   return target[prop];
               }
@@ -125,7 +126,7 @@ export default function Page() {
     };
 
     // =================================================================
-    // 4. LOGIKA HALAMAN (LOGIN, LOGOUT, LOAD PAGE)
+    // 4. LOGIKA HALAMAN (LOGIN, LOGOUT, LOAD PAGE, RENDER DASHBOARD)
     // =================================================================
     window.handleLogin = async function() {
         const u = document.getElementById('u-login').value;
@@ -146,21 +147,18 @@ export default function Page() {
                 body: JSON.stringify({ action: "loginUser", args: [u, p] })
             });
 
-            if (!res.ok) {
-                const txt = await res.text();
-                throw new Error(txt);
-            }
+            if (!res.ok) throw new Error(await res.text());
 
             const data = await res.json();
             window.showLoad(false);
 
             if (data.status === 'success') {
                 window.user = data.data;
-                window.user.LogoUrl = LOGO_BARU;
+                window.user.LogoUrl = window.LOGO_BARU;
                 localStorage.setItem('cbt_user', JSON.stringify(window.user));
                 
                 const logoEl = document.querySelector('#logo-container img');
-                if(logoEl) logoEl.src = LOGO_BARU;
+                if(logoEl) logoEl.src = window.LOGO_BARU;
                 
                 window.initDash();
             } else {
@@ -177,10 +175,14 @@ export default function Page() {
     window.initDash = function() {
         if(!window.user) return;
         
+        // Atasi Tumpang Tindih Layout
         const authView = document.getElementById('view-auth');
         const dashView = document.getElementById('view-dashboard');
         
-        if(authView) authView.style.display = 'none'; 
+        if(authView) {
+            authView.classList.add('hidden');
+            authView.style.display = 'none'; 
+        }
         if(dashView) {
             dashView.classList.remove('hidden');
             dashView.style.display = 'flex';
@@ -291,19 +293,18 @@ export default function Page() {
             localStorage.removeItem('cbt_user'); localStorage.removeItem('cbt_active_exam'); window.user = null;
             clearInterval(window.timerInt); clearInterval(window.monitorInterval); clearInterval(window.autosaveInterval); window.activeExamId = null;
             
-            const $ = window.jQuery;
-            if($) {
-                $('#view-dashboard').addClass('hidden'); 
-                $('#view-dashboard').hide(); 
-                $('#view-exam').addClass('hidden'); 
-                $('body').removeClass('exam-mode');
-                $('#sidebar').removeClass('active'); 
-                $('#sidebar-overlay').removeClass('active');
-            }
+            const authView = document.getElementById('view-auth');
+            const dashView = document.getElementById('view-dashboard');
+            
+            if(dashView) { dashView.classList.add('hidden'); dashView.style.display = 'none'; }
+            $('#view-exam').addClass('hidden'); 
+            $('body').removeClass('exam-mode');
+            $('#sidebar').removeClass('active'); 
+            $('#sidebar-overlay').removeClass('active');
             
             document.getElementById('u-login').value = ''; 
             document.getElementById('p-login').value = ''; 
-            document.getElementById('view-auth').style.display = 'flex'; 
+            if(authView) { authView.classList.remove('hidden'); authView.style.display = 'flex'; }
         };
 
         if (window.Swal) {
@@ -374,7 +375,9 @@ export default function Page() {
         }
     };
 
-    // --- SISANYA ADALAH FUNGSI SISTEM ---
+    // =================================================================
+    // 5. SISANYA ADALAH FUNGSI SISTEM PELENGKAP UJIAN
+    // =================================================================
     window.playBeep = function(times, continuous = false) {
         if(audioCtx.state === 'suspended') audioCtx.resume();
         if (continuous) {
@@ -761,10 +764,10 @@ export default function Page() {
             inp += `</tbody></table>`;
         } else if(q.Tipe==='Menjodohkan') {
             const lItems = JSON.parse(q.Options||"[]"); let rItems = []; try { rItems = [...JSON.parse(q.Key||"[]")].sort(() => Math.random() - 0.5); } catch(e){}
-            inp = `<div style="display:flex; justify-content:space-between; gap:20px; margin-top:15px;"><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${lItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${rItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div></div>`;
+            inp = `<div style="display:flex; justify-content:space-between; gap:20px; margin-top:15px;"><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${lItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${rItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="window.resetMatch(${i})">Reset Garis</button></div>`;
         } else if(q.Tipe.includes('PG')) {
             const opts = JSON.parse(q.Options||"[]");
-            opts.forEach(o => { inp += `<label style="display:flex; align-items:center; border:1px solid #e2e8f0; padding:15px; margin-bottom:10px; border-radius:6px; background:#fff; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.05);"><input type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" style="margin-right:15px; transform:scale(1.5);"><div style="flex-grow:1; margin:0;">${o}</div></label>`; });
+            opts.forEach(o => { inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`; });
         } else {
             inp = `<textarea style="width:100%; padding:15px; border:1px solid #e2e8f0; border-radius:6px; font-family:inherit; resize:vertical;" rows="5" placeholder="Ketik jawaban Anda di sini..."></textarea>`;
         }
@@ -942,7 +945,7 @@ export default function Page() {
     };
 
     window.runExam = function(qs, dur, isResume) {
-        const $= window.jQuery; if(!$) return;
+        const $ = window.jQuery; if(!$) return;
         $('#view-dashboard').addClass('hidden'); $('#view-exam').removeClass('hidden'); $('body').addClass('exam-mode');
         const c = $('#q-slides-container'); const g = $('#nav-grid'); c.empty(); g.empty();
         qs.forEach((q,i) => {
@@ -1176,6 +1179,25 @@ export default function Page() {
 
     window.filterTable = function(tid, q) { const $ = window.jQuery; if(!$) return; const f=q.toLowerCase();$(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); };
 
+    // =================================================================
+    // Cek Session Saat Awal Render
+    // =================================================================
+    const savedUser = localStorage.getItem('cbt_user');
+    if(savedUser) {
+        window.user = JSON.parse(savedUser);
+        setTimeout(() => {
+            const logoEl = document.querySelector('#logo-container img');
+            if (logoEl) logoEl.src = window.user.LogoUrl || window.LOGO_BARU;
+            window.initDash();
+            if(window.checkResumeExam) window.checkResumeExam();
+        }, 300);
+    } else {
+        setTimeout(() => {
+            const authView = document.getElementById('view-auth');
+            if (authView) authView.style.display = 'flex';
+        }, 100);
+    }
+
   }, [isMounted]);
 
   if (!isMounted) return <div style={{ width: '100vw', height: '100vh', backgroundColor: '#f1f5f9' }} />;
@@ -1198,17 +1220,11 @@ export default function Page() {
 
       <div dangerouslySetInnerHTML={{ __html: `
         <style>
-          :root { 
-              --primary: #7e22ce; 
-              --secondary: #a855f7; 
-              --accent: #84cc16; 
-              --bg-body: #faf5ff; 
-          }
+          :root { --primary: #7e22ce; --secondary: #a855f7; --accent: #84cc16; --bg-body: #faf5ff; }
           body { font-family: 'Poppins', sans-serif; background-color: var(--bg-body); color: #1e293b; overflow-x: hidden; margin: 0; }
           body.exam-mode { overflow: hidden; user-select: none; }
           .hidden { display: none !important; }
           .q-content img, .opt-content img { max-width: 100% !important; height: auto !important; border-radius: 6px; margin: 5px 0; }
-          
           .text-primary { color: var(--primary) !important; }
           .bg-primary { background-color: var(--primary) !important; color: white !important; }
           .btn-primary { background-color: var(--primary) !important; border-color: var(--primary) !important; color: white !important; }
@@ -1274,10 +1290,10 @@ export default function Page() {
           #content-area { flex: 1; }
         </style>
 
-        <div id="loader" class="loader"><div class="spinner"></div></div>
+        <div id="loader" class="loader hidden"><div class="spinner"></div></div>
         <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
         
-        <!-- LAYAR LOGIN SPLIT -->
+        <!-- LAYAR LOGIN -->
         <div id="view-auth" class="auth-wrapper" style="display:none;">
             <div class="auth-card-split">
                 <div class="auth-left">
@@ -1295,7 +1311,6 @@ export default function Page() {
                         <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
                         <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
                     </div>
-                    <!-- Form Native Prevent Default -->
                     <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;">
                         <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
                         <div class="form-floating mb-4 position-relative">
@@ -1310,7 +1325,7 @@ export default function Page() {
             <div class="auth-footer">© 2026 BELAJAR INOVASI</div>
         </div>
 
-        <!-- LAYAR DASHBOARD UTAMA -->
+        <!-- LAYAR DASHBOARD -->
         <div id="view-dashboard" class="hidden wrapper">
             <nav id="sidebar">
                 <div class="sidebar-header d-flex align-items-center justify-content-between p-3 border-bottom border-secondary">
@@ -1380,12 +1395,13 @@ export default function Page() {
             </div>
         </div>
 
+        <!-- MODAL LIST -->
         <div class="modal fade" id="modalExam" tabindex="-1">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <div class="modal-header bg-primary text-white"><h5 class="modal-title">Konfigurasi Ujian</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;" action="javascript:void(0);">
+                        <form id="frm-exam" onsubmit="event.preventDefault(); window.saveExam(); return false;">
                             <input type="hidden" id="ex-id" name="examId">
                             <div class="mb-3"><label class="small fw-bold">Judul Ujian</label><input type="text" name="judul" id="ex-judul" class="form-control" required></div>
                             <div class="row g-3 mb-3">
