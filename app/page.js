@@ -13,6 +13,7 @@ export default function Page() {
     window.appInitialized = true;
 
     const initApp = () => {
+      // Tunggu sampai jQuery dan SweetAlert termuat sepenuhnya
       if (!window.jQuery || !window.Swal) {
         setTimeout(initApp, 100);
         return;
@@ -22,7 +23,7 @@ export default function Page() {
       const LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
 
       // ==========================================
-      // PROXY API: PENGGANTI GOOGLE.SCRIPT.RUN (ANTI-MACET)
+      // PROXY API: PENGGANTI GOOGLE.SCRIPT.RUN 
       // ==========================================
       window.google = {
         script: {
@@ -52,9 +53,7 @@ export default function Page() {
                   })
                   .catch((err) => { 
                       console.error("API Fetch Error:", err);
-                      // Memaksa loading berhenti jika error agar tidak macet
                       if (window.showLoad) window.showLoad(false); 
-                      
                       if (target.failureFn) target.failureFn(err); 
                       else window.Swal.fire("Koneksi Gagal", err.message, "error");
                   });
@@ -82,7 +81,7 @@ export default function Page() {
       let violationCount = 0;
       let isExamFinished = false;
       let violationLock = false;
-
+      
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       let finalBeepOsc = null;
       let beepInterval = null;
@@ -177,31 +176,22 @@ export default function Page() {
       // FUNGSI LOGIN (SUDAH DIPERBAIKI ANTI MACET)
       // ==========================================
       window.handleLogin = function() {
-          try {
-              if (!window.Swal || !window.jQuery) {
-                  alert('Sistem sedang memuat komponen, mohon tunggu sebentar...');
-                  return;
-              }
-              window.showLoad(true);
-              window.google.script.run.withSuccessHandler(res => {
-                  window.showLoad(false);
-                  if(res.status === 'success') {
-                      user = res.data; 
-                      user.LogoUrl = LOGO_BARU; 
-                      localStorage.setItem('cbt_user', JSON.stringify(user));
-                      $('#logo-container img').attr('src', LOGO_BARU);
-                      window.initDash();
-                  } else {
-                      window.Swal.fire('Gagal Login', res.msg, 'error');
-                  }
-              }).withFailureHandler(err => {
-                  window.showLoad(false); 
-                  window.Swal.fire('Error', 'Koneksi ke server gagal: ' + err.message, 'error');
-              }).loginUser($('#u-login').val(), $('#p-login').val());
-          } catch(e) {
+          window.showLoad(true);
+          window.google.script.run.withSuccessHandler(res => {
               window.showLoad(false);
-              console.error(e);
-          }
+              if(res.status === 'success') {
+                  user = res.data; 
+                  user.LogoUrl = LOGO_BARU; 
+                  localStorage.setItem('cbt_user', JSON.stringify(user));
+                  $('#logo-container img').attr('src', LOGO_BARU);
+                  window.initDash();
+              } else {
+                  window.Swal.fire('Gagal Login', res.msg, 'error');
+              }
+          }).withFailureHandler(err => {
+              window.showLoad(false); 
+              window.Swal.fire('Error', 'Koneksi ke server gagal: ' + err.message, 'error');
+          }).loginUser($('#u-login').val(), $('#p-login').val());
       };
 
       function handleLogout() {
@@ -212,7 +202,7 @@ export default function Page() {
                   clearInterval(timerInt); clearInterval(monitorInterval); clearInterval(autosaveInterval); activeExamId = null;
                   $('#view-dashboard').addClass('hidden'); $('#view-exam').addClass('hidden'); $('body').removeClass('exam-mode');
                   $('#u-login').val(''); $('#p-login').val(''); 
-                  $('#view-auth').css('display', 'flex'); // Mengembalikan ke layar login flex
+                  $('#view-auth').css('display', 'flex'); 
                   $('#sidebar').removeClass('active'); $('#sidebar-overlay').removeClass('active');
               }
           });
@@ -726,7 +716,9 @@ export default function Page() {
                   qs.forEach((q, idx) => { html += window.renderQuestionBlock(q, idx); });
                   $('#q-list-container').html(topActions + html); window.applyMathJax();
               } else { $('#q-list-container').html(topActions + '<div class="alert alert-info text-center">Belum ada soal. Klik Tambah Soal atau Upload Excel.</div>'); }
-          }).withFailureHandler(err => window.Swal.fire('Error', err.message, 'error')).getExamQuestions(activeExamId);
+          }).withFailureHandler(err => {
+              window.Swal.fire('Error', err.message, 'error');
+          }).getExamQuestions(activeExamId);
       }
 
       function addNewQuestionBlock() {
@@ -1133,11 +1125,11 @@ export default function Page() {
       function filterTable(tid, q) { const f=q.toLowerCase(); $(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); }
 
       // ==========================================
-      // GLOBAL BINDING (SANGAT PENTING UNTUK HTML ONCLICK)
+      // GLOBAL BINDING EVENT
       // ==========================================
       window.playBeep = playBeep; window.stopContinuousBeep = stopContinuousBeep; window.applyMathJax = applyMathJax;
       window.checkResumeExam = checkResumeExam; window.toggleSidebar = toggleSidebar; window.showLoad = showLoad; window.toast = toast;
-      window.handleLogin = handleLogin; window.handleLogout = handleLogout; window.initDash = initDash; window.appRefresh = appRefresh;
+      window.handleLogout = handleLogout; window.initDash = initDash; window.appRefresh = appRefresh;
       window.loadPage = loadPage; window.exportToExcel = exportToExcel; window.generateUserExcelTemplate = generateUserExcelTemplate;
       window.handleUploadUsersExcel = handleUploadUsersExcel; window.toggleAllCb = toggleAllCb; window.checkBulkDelete = checkBulkDelete;
       window.bulkDeleteUsers = bulkDeleteUsers; window.bulkDeleteRekap = bulkDeleteRekap; window.renderUsers = renderUsers;
@@ -1163,13 +1155,20 @@ export default function Page() {
       window.triggerReset = triggerReset; window.triggerResetMassal = triggerResetMassal; window.filterTable = filterTable;
 
       // ==========================================
-      // ON DOCUMENT READY
+      // EVENT BINDINGS UNTUK TOMBOL (MENGATASI BUG MACET)
       // ==========================================
-      $('#togglePassword').on('click', function() {
+      $(document).off('submit', '#frm-login').on('submit', '#frm-login', function(e) {
+          e.preventDefault();
+          if (!window.Swal || !window.jQuery) { alert('Sistem sedang memuat, mohon tunggu...'); return false; }
+          handleLogin();
+      });
+
+      $(document).off('click', '#togglePassword').on('click', '#togglePassword', function() {
           const type = $('#p-login').attr('type') === 'password' ? 'text' : 'password';
           $('#p-login').attr('type', type);
           $(this).toggleClass('fa-eye fa-eye-slash');
       });
+
       const savedUser = localStorage.getItem('cbt_user');
       if(savedUser) {
           user = JSON.parse(savedUser);
@@ -1213,7 +1212,6 @@ export default function Page() {
           .hidden { display: none !important; }
           .q-content img, .opt-content img { max-width: 100% !important; height: auto !important; border-radius: 6px; margin: 5px 0; }
           
-          /* INJEKSI CSS TEMA UNGU/HIJAU MUDA KESELURUH DASBOR */
           .text-primary { color: var(--primary) !important; }
           .bg-primary { background-color: var(--primary) !important; color: white !important; }
           .btn-primary { background-color: var(--primary) !important; border-color: var(--primary) !important; color: white !important; }
@@ -1228,9 +1226,9 @@ export default function Page() {
           .badge.bg-primary { background-color: var(--primary) !important; }
           .badge.bg-success { background-color: var(--accent) !important; }
 
-          /* PERBAIKAN TAMPILAN LOGIN (SPLIT KIRI KANAN) */
+          /* PERBAIKAN TAMPILAN LOGIN KIRI DAN KANAN YANG STABIL */
           .auth-wrapper { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(126,34,206,0.95) 0%, rgba(132,204,22,0.95) 100%); padding: 20px; }
-          .auth-card-split { display: flex; background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); max-width: 900px; width: 100%; overflow: hidden; z-index: 2; margin-bottom: 20px; }
+          .auth-card-split { display: flex; background: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); max-width: 900px; width: 100%; overflow: hidden; z-index: 2; margin-bottom: 20px; min-height: 400px; }
           .auth-left { flex: 1; background: linear-gradient(135deg, rgba(126,34,206,1) 0%, rgba(132,204,22,1) 100%); color: white; padding: 40px; display: flex; flex-direction: column; justify-content: center; }
           .auth-right { flex: 1; padding: 40px; display: flex; flex-direction: column; justify-content: center; background: white; }
           .auth-footer { text-align: center; color: rgba(255,255,255,0.9); font-size: 0.875rem; z-index: 3; width: 100%; }
@@ -1277,13 +1275,12 @@ export default function Page() {
           .clickable-opt { cursor: pointer; transition: all 0.2s ease-in-out; margin-bottom: 0; }
           .clickable-opt:hover { background-color: #f1f5f9 !important; border-color: var(--secondary) !important; }
           #content-area { flex: 1; }
-          .icon-eye-login { cursor: pointer; z-index: 10; font-size: 1.2rem; }
         </style>
 
         <div id="loader" class="loader hidden"><div class="spinner"></div></div>
         <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
         
-        <!-- LAYAR LOGIN SPLIT KIRI-KANAN -->
+        <!-- LAYAR LOGIN SPLIT (KIRI PENJELASAN, KANAN LOGIN, FOOTER DI BAWAH) -->
         <div id="view-auth" class="auth-wrapper">
             <div class="auth-card-split">
                 <div class="auth-left">
@@ -1301,12 +1298,12 @@ export default function Page() {
                         <h4 class="fw-bold text-center text-primary">BELAJAR INOVASI</h4>
                         <p class="small text-muted mt-1">Aplikasi Ujian Berbasis Komputer</p>
                     </div>
-                    <form id="frm-login" onsubmit="event.preventDefault(); window.handleLogin(); return false;">
+                    <form id="frm-login">
                         <div class="form-floating mb-3"><input type="text" id="u-login" class="form-control" placeholder="User" required><label>Username</label></div>
                         <div class="form-floating mb-4 position-relative">
                             <input type="password" id="p-login" class="form-control" placeholder="Pass" required>
                             <label>Password</label>
-                            <i class="fas fa-eye position-absolute top-50 end-0 translate-middle-y me-3 text-muted icon-eye-login" id="togglePassword"></i>
+                            <i class="fas fa-eye position-absolute top-50 end-0 translate-middle-y me-3 text-muted" id="togglePassword" style="cursor: pointer; z-index: 100; pointer-events: auto;"></i>
                         </div>
                         <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">MASUK SEKARANG</button>
                     </form>
