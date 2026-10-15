@@ -203,16 +203,19 @@ export async function POST(req) {
         const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [eid] });
         let totalScore = 0; let maxScore = 0; let detailLog = [];
 
-        // PERBAIKAN: Fungsi pembersih string agar pencocokan jawaban 100% akurat 
-        const cleanStr = (s) => {
+        // PERBAIKAN FATAL PENILAIAN: 
+        // Jangan hapus tag HTML (<img...>, dll) karena opsi bisa berupa gambar/rumus saja.
+        // Cukup normalkan enter/tab/spasi agar string cocok persis 100%.
+        const normalizeStr = (s) => {
             if (s === null || s === undefined) return '';
-            return String(s).replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, '').trim().toLowerCase();
+            return String(s).replace(/[\r\n\t]+/g, ' ').trim();
         };
 
         qRes.rows.forEach(q => {
             const userAns = ansArr.find(a => String(a.qid) === String(q.QID));
             const ansVal = userAns ? userAns.answer : '';
             
+            // Parsing KeyAnswer dengan aman
             let rawKeys = q.KeyAnswer || q.Key || "[]";
             let keyArr = [];
             try { 
@@ -223,27 +226,28 @@ export async function POST(req) {
             const skorItem = Number(q.Skor || 10);
             let earned = 0;
 
+            // Logika Penilaian Tepat Sasaran
             if (q.Tipe === 'PGS') {
-                if (cleanStr(ansVal) === cleanStr(keyArr[0])) earned = skorItem;
+                if (normalizeStr(ansVal) === normalizeStr(keyArr[0])) earned = skorItem;
             } 
             else if (q.Tipe === 'PGK') {
                 if (Array.isArray(ansVal)) {
-                    const cleanAns = ansVal.map(cleanStr).sort();
-                    const cleanKey = keyArr.map(cleanStr).sort();
+                    const cleanAns = ansVal.map(normalizeStr).sort();
+                    const cleanKey = keyArr.map(normalizeStr).sort();
                     if (JSON.stringify(cleanAns) === JSON.stringify(cleanKey)) earned = skorItem;
                 }
             } 
             else if (q.Tipe === 'PGKK' || q.Tipe === 'Menjodohkan') {
                 let correctCount = 0;
                 keyArr.forEach((k, idx) => { 
-                    if (ansVal && Array.isArray(ansVal) && cleanStr(ansVal[idx]) === cleanStr(k)) {
+                    if (ansVal && Array.isArray(ansVal) && normalizeStr(ansVal[idx]) === normalizeStr(k)) {
                         correctCount++;
                     }
                 });
                 earned = keyArr.length > 0 ? (correctCount / keyArr.length) * skorItem : 0;
             } 
             else if (q.Tipe === 'Uraian') {
-                earned = 0; // Uraian tidak dinilai otomatis
+                earned = 0; // Uraian dikoreksi manual
             }
 
             maxScore += skorItem;
@@ -251,6 +255,7 @@ export async function POST(req) {
             detailLog.push({ i: q.Nomor, s: Number(earned.toFixed(2)), m: skorItem, t: q.Tipe, a: ansVal });
         });
 
+        // Kalkulasi ke skala 100
         const finalScore = maxScore > 0 ? Number(((totalScore / maxScore) * 100).toFixed(2)) : 0;
         const rid = 'RES' + Date.now() + Math.floor(Math.random() * 1000);
         
