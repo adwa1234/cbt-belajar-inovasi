@@ -104,7 +104,7 @@ export default function Page() {
           }
       };
 
-            // PERBAIKAN: Reset Cache tanpa reload layar penuh, tetap di halaman akun saat ini
+      // PERBAIKAN: Reset Cache CBT dijamin lancar dan tidak terus loading
       window.handleResetCache = function() {
           window.Swal.fire({
               title: 'Sinkronisasi & Reset Cache?',
@@ -115,31 +115,19 @@ export default function Page() {
               confirmButtonText: 'Ya, Sinkronkan!'
           }).then((r) => {
               if (r.isConfirmed) {
-                  window.showLoad(true);
-                  
-                  // Ambil halaman aktif saat ini sebelum cache dibersihkan
-                  const activeLink = document.querySelector('.nav-link.active');
-                  let currentPage = 'admin-home';
-                  if (activeLink) {
-                      const match = activeLink.getAttribute('onclick').match(/'([^']+)'/);
-                      if (match && match[1]) currentPage = match[1];
-                  }
-
                   const savedUser = localStorage.getItem('cbt_user');
                   localStorage.clear();
                   sessionStorage.clear();
                   if(savedUser) localStorage.setItem('cbt_user', savedUser);
-                  localStorage.setItem('cbt_app_version', 'v23_final_fix');
+                  // Update versi agar sistem tahu cache sudah bersih
+                  localStorage.setItem('cbt_app_version', 'v23_cache_cleared');
                   
-                  // Render ulang halaman saat ini untuk mengambil data baru dari database
-                  window.toast('success', 'Cache dibersihkan. Memuat ulang data...');
-                  setTimeout(() => { window.loadPage(currentPage); }, 500);
+                  // Refresh bersih dengan memanggil reload dari awal
+                  window.location.reload();
               }
           });
       };
 
-      // PERBAIKAN: Manajemen Modal Diperbarui agar Form Berfungsi Normal
-      // PERBAIKAN: Memastikan popup (modal) muncul dengan benar dan tombol bisa diklik
       window.openModal = function(id) {
           const el = document.getElementById(id);
           if (!el) return;
@@ -395,191 +383,6 @@ export default function Page() {
               if(r.isConfirmed) executeLogout();
           });
       };
-      // =================================================================
-      // FUNGSI JADWAL UJIAN: TAMBAH, EDIT, DAN HAPUS
-      // =================================================================
-      window.openExamModal = function(str) {
-          const form = document.getElementById('frm-exam');
-          if(form) form.reset();
-          
-          document.getElementById('ex-id').value = '';
-          let d = null;
-          if(str) {
-              try {
-                  // PERBAIKAN: Decode Base64 dengan aman
-                  d = JSON.parse(decodeURIComponent(atob(str)));
-                  document.getElementById('ex-id').value = d.ExamID || '';
-                  document.getElementById('ex-judul').value = d.Judul || '';
-                  document.getElementById('ex-mapel').value = d.Mapel || '';
-                  document.getElementById('ex-durasi').value = d.Durasi || '';
-                  document.getElementById('ex-limit').value = d.LimitTries || d.Limit || 1;
-                  document.getElementById('ex-start').value = d.StartDate ? d.StartDate.replace(' ','T') : '';
-                  document.getElementById('ex-end').value = d.EndDate ? d.EndDate.replace(' ','T') : '';
-                  document.getElementById('ex-token').value = d.Token || '';
-                  document.getElementById('ex-randomQ').checked = d.RandomQ === 'Yes';
-                  document.getElementById('ex-showStats').checked = d.ShowStats === 'Yes';
-                  document.getElementById('ex-violations').value = d.MaxViolations || 3;
-              } catch(e) {
-                  console.error("Gagal membaca data edit:", e);
-                  window.Swal.fire('Error', 'Data ujian rusak, tidak dapat diedit.', 'error');
-                  return;
-              }
-          } else {
-              document.getElementById('ex-violations').value = 3;
-              document.getElementById('ex-limit').value = 1;
-          }
-
-          const role = String(window.user.Role).trim().toLowerCase();
-          const container = document.getElementById('kelas-container');
-
-          if (role === 'guru') {
-              const kelasArr = String(window.user.Kelas).split(',').map(k => k.trim()).filter(k => k);
-              let selectedKelas = d && d.TargetKelas ? String(d.TargetKelas).split(',').map(k => k.trim()) : kelasArr;
-              let htmlKelas = `<div class="d-flex flex-wrap gap-2 mt-2">`;
-              kelasArr.forEach(k => {
-                  const isChecked = selectedKelas.includes(k) ? 'checked' : '';
-                  htmlKelas += `<div class="form-check"><input class="form-check-input kls-cb" type="checkbox" value="${k}" id="cb-${k}" ${isChecked}><label class="form-check-label small" for="cb-${k}">${k}</label></div>`;
-              });
-              htmlKelas += `</div>`;
-              container.innerHTML = htmlKelas;
-          } else {
-              let valKelas = d && d.TargetKelas ? d.TargetKelas : '';
-              container.innerHTML = `<input type="text" id="ex-kelas" class="form-control" placeholder="Contoh: 7A, 7B" value="${valKelas}" required>`;
-          }
-          
-          window.openModal('modalExam');
-      };
-
-      window.saveExam = function() {
-          let targetKelas = "";
-          const role = String(window.user.Role).trim().toLowerCase();
-          
-          if (role === 'guru') {
-              let selectedKls = [];
-              document.querySelectorAll('.kls-cb:checked').forEach(cb => selectedKls.push(cb.value));
-              if (selectedKls.length === 0) { window.Swal.fire('Error', 'Pilih minimal 1 target kelas!', 'error'); return; }
-              targetKelas = selectedKls.join(', ');
-          } else {
-              const klsEl = document.getElementById('ex-kelas');
-              if(klsEl) targetKelas = klsEl.value;
-          }
-
-          const d = {
-              examId: document.getElementById('ex-id').value,
-              judul: document.getElementById('ex-judul').value,
-              mapel: document.getElementById('ex-mapel').value,
-              durasi: document.getElementById('ex-durasi').value,
-              start: document.getElementById('ex-start').value,
-              end: document.getElementById('ex-end').value,
-              limit: document.getElementById('ex-limit').value,
-              token: document.getElementById('ex-token').value,
-              maxViolations: document.getElementById('ex-violations').value,
-              showStats: document.getElementById('ex-showStats').checked ? 'Yes' : 'No',
-              randomQ: document.getElementById('ex-randomQ').checked ? 'Yes' : 'No',
-              targetKelas: targetKelas,
-              userRole: window.user.Role,
-              userClass: window.user.Kelas,
-              userId: window.user.ID
-          };
-
-          if (!d.judul || !d.mapel || !d.start || !d.end || !d.targetKelas) {
-              window.Swal.fire('Error', 'Lengkapi data wajib!', 'error'); return;
-          }
-
-          const btn = document.querySelector('#frm-exam button[type="submit"]');
-          const origBtn = btn.innerHTML;
-          btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
-          btn.disabled = true;
-
-          window.google.script.run.withSuccessHandler((res) => {
-              btn.innerHTML = origBtn; btn.disabled = false;
-              if(res.status === 'success') {
-                  window.closeModal('modalExam');
-                  // PERBAIKAN: Langsung arahkan ke refresh dashboard tanpa trigger loader tambahan
-                  window.toast('success', 'Jadwal berhasil disimpan!');
-                  window.loadPage('admin-ujian'); 
-              } else { 
-                  window.Swal.fire('Gagal Menyimpan', res.msg, 'error'); 
-              }
-          }).withFailureHandler(err => { 
-              btn.innerHTML = origBtn; btn.disabled = false; 
-              window.Swal.fire('Koneksi Error', err.message, 'error'); 
-          }).adminSaveExam(d);
-      };
-
-
-      window.delExam = function(id) { 
-          window.Swal.fire({
-              title: 'Hapus Jadwal?', 
-              text: "Jadwal dan soal ujian di dalamnya akan dihapus.",
-              icon: 'warning', 
-              showCancelButton: true, 
-              confirmButtonColor: '#d33',
-              confirmButtonText: 'Ya, Hapus!'
-          }).then(r => {
-              if(r.isConfirmed) { 
-                  window.showLoad(true); 
-                  window.google.script.run.withSuccessHandler(() => {
-                      window.showLoad(false); // PERBAIKAN: Mematikan loader!
-                      window.toast('success', 'Jadwal berhasil dihapus!');
-                      window.loadPage('admin-ujian');
-                  }).withFailureHandler(err => { 
-                      window.showLoad(false); 
-                      window.Swal.fire('Error', err.message, 'error');
-                  }).adminDeleteExam(id, window.user.ID, window.user.Role); 
-              } 
-          }); 
-      };
-
-      window.openKoreksi = function(rid) {
-          const d = window.recapDataStore[rid]; 
-          if (!d) {
-              window.Swal.fire('Error', 'Data riwayat tidak ditemukan.', 'error');
-              return;
-          }
-          let detailArr = []; 
-          try { detailArr = JSON.parse(d.detail); } catch(e){ console.error("Koreksi Parse Error:", e); }
-          
-          let html = `<input type="hidden" id="kor-rid" value="${rid}"><div class="alert alert-info border-0 shadow-sm">Siswa: <b>${d.nama}</b><br>Ujian: <b>${d.ujian}</b></div>`;
-          html += `<div class="alert alert-warning mb-3">Total Nilai Saat Ini: <b class="fs-5">${d.nilai}</b><br>Anda dapat memodifikasi skor per soal di bawah ini.</div>`;
-          
-          detailArr.forEach((item, index) => {
-              let no = item.i !== undefined ? item.i : item[0]; 
-              let score = item.s !== undefined ? item.s : item[1]; 
-              let type = item.t || 'Objektif'; 
-              let ans = item.a !== undefined ? item.a : ''; 
-              let max = item.m !== undefined ? item.m : 0;
-              
-              html += `<div class="card mb-2 border-0 shadow-sm"><div class="card-body p-3"><div class="d-flex justify-content-between align-items-center mb-2"><strong class="text-primary">Soal No. ${no} <span class="badge bg-secondary ms-1">${type}</span></strong><div class="fw-bold d-flex align-items-center">Skor: <input type="number" step="0.1" class="form-control form-control-sm d-inline w-auto kor-score ms-2" data-idx="${index}" value="${score}" style="max-width: 80px;"> <span class="ms-1 text-muted">/ ${max}</span></div></div>`;
-              let displayAns = Array.isArray(ans) ? ans.join(', ') : ans;
-              html += `<div class="p-2 bg-light rounded border small mt-2"><b>Jawaban Siswa:</b><br>${displayAns ? String(displayAns).replace(/\n/g, '<br>') : '<i class="text-muted">Tidak dijawab</i>'}</div></div></div>`;
-          });
-          document.getElementById('kor-body').innerHTML = html;
-          window.openModal('modalKoreksi');
-      };
-      window.deleteResult = function(rid) { 
-          window.Swal.fire({
-              title: 'Hapus & Reset Ujian?', 
-              text: 'Data dihapus, status ujian direset, dan siswa bisa ujian kembali.', 
-              icon: 'warning', 
-              showCancelButton: true, 
-              confirmButtonColor: '#d33'
-          }).then(r => { 
-              if(r.isConfirmed) { 
-                  window.showLoad(true); 
-                  window.google.script.run.withSuccessHandler(res => { 
-                      window.showLoad(false); // PERBAIKAN: Mematikan loader
-                      if(res.status === 'success'){ 
-                          window.toast('success', res.msg); 
-                          window.loadPage('hasil-rekap'); 
-                      } else window.Swal.fire('Gagal', res.msg, 'error'); 
-                  }).withFailureHandler(err => { 
-                      window.showLoad(false); 
-                      window.Swal.fire('Error', err.message, 'error'); 
-                  }).adminDeleteResult(rid); 
-              } 
-          }); 
-      };
 
       // =================================================================
       // 7. RENDER KONTEN DASHBOARD
@@ -609,10 +412,7 @@ export default function Page() {
                   
                   exams.forEach(e => {
                       const isOwner = (String(window.user.Role).trim().toLowerCase() === 'admin' || String(e.PembuatID) === String(window.user.ID));
-                      
-                      // PERBAIKAN: Gunakan Base64 agar string JSON aman dari kerusakan tanda kutip di HTML
-                      const safeE = btoa(encodeURIComponent(JSON.stringify(e)));
-                      
+                      const safeE = encodeURIComponent(JSON.stringify(e));
                       const actionButtons = isOwner ? `<button class="btn btn-sm btn-outline-dark flex-fill" onclick="window.openExamModal('${safeE}')">Edit</button> <button class="btn btn-sm btn-outline-primary flex-fill" onclick="window.manageQ('${e.ExamID}')"><i class="fas fa-list me-1"></i> Soal</button> <button class="btn btn-sm btn-danger" onclick="window.delExam('${e.ExamID}')"><i class="fas fa-trash"></i></button>` : `<div class="alert alert-light small m-0 p-1 text-center w-100">Read Only</div>`;
                       h += `<div class="col-md-6 col-lg-4 ujian-card" data-mapel="${e.Mapel}" data-kelas="${e.TargetKelas}"><div class="card h-100 shadow-sm border-0"><div class="card-body"><div class="d-flex justify-content-between mb-2"><span class="badge bg-primary">${e.Mapel}</span><span class="badge bg-light text-dark border">${e.TargetKelas}</span></div><h5 class="fw-bold text-dark">${e.Judul}</h5><div class="d-flex gap-2">${actionButtons}</div></div></div></div>`;
                   });
@@ -1572,7 +1372,7 @@ export default function Page() {
           } 
           document.getElementById('ans-area-'+uid).innerHTML = h; 
           
-          const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', tooltip: 'Rumus', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((result) => { if (result.isConfirmed) { const mathText = document.getElementById('swal-math-input').value; if(mathText) context.invoke('editor.insertText', ` $$ ${mathText}$$ `); } }); } }).render(); };
+          const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', tooltip: 'Rumus', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea idswal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((result) => { if (result.isConfirmed) { const mathText = document.getElementById('swal-math-input').value; if(mathText) context.invoke('editor.insertText', ` $$ ${mathText}$$ `); } }); } }).render(); };
           $('#ans-area-'+uid+' .summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); 
       };
 
@@ -1743,9 +1543,8 @@ export default function Page() {
             return;
         }
 
-        // PERBAIKAN FINAL: Paksa browser membersihkan cache saat pertama reload (v22_final_fix)
-        // Data user dipertahankan, mencegah error render komponen.
-        const APP_VERSION = 'v22_final_fix';
+        // PERBAIKAN FINAL: Paksa browser membersihkan cache saat pertama reload (v23_final_fix)
+        const APP_VERSION = 'v23_final_fix';
         if(localStorage.getItem('cbt_app_version') !== APP_VERSION) {
             const savedUser = localStorage.getItem('cbt_user');
             localStorage.clear();
