@@ -557,6 +557,29 @@ export default function Page() {
           document.getElementById('kor-body').innerHTML = html;
           window.openModal('modalKoreksi');
       };
+      window.deleteResult = function(rid) { 
+          window.Swal.fire({
+              title: 'Hapus & Reset Ujian?', 
+              text: 'Data dihapus, status ujian direset, dan siswa bisa ujian kembali.', 
+              icon: 'warning', 
+              showCancelButton: true, 
+              confirmButtonColor: '#d33'
+          }).then(r => { 
+              if(r.isConfirmed) { 
+                  window.showLoad(true); 
+                  window.google.script.run.withSuccessHandler(res => { 
+                      window.showLoad(false); // PERBAIKAN: Mematikan loader
+                      if(res.status === 'success'){ 
+                          window.toast('success', res.msg); 
+                          window.loadPage('hasil-rekap'); 
+                      } else window.Swal.fire('Gagal', res.msg, 'error'); 
+                  }).withFailureHandler(err => { 
+                      window.showLoad(false); 
+                      window.Swal.fire('Error', err.message, 'error'); 
+                  }).adminDeleteResult(rid); 
+              } 
+          }); 
+      };
 
       // =================================================================
       // 7. RENDER KONTEN DASHBOARD
