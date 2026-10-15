@@ -158,24 +158,8 @@ export async function POST(req) {
         await turso.execute({ sql: "DELETE FROM Questions WHERE QID = ?", args: [id] });
         return NextResponse.json({ status: "success", msg: "Soal dihapus!" });
     }
-    
+
     // ==========================================
-    // 6. CETAK ADMINISTRASI & DEFAULT FALLBACK
-    // ==========================================
-    else if (action === "getAdminData") {
-        const examsRes = await turso.execute("SELECT * FROM Exams");
-        const usersRes = await turso.execute("SELECT * FROM Users WHERE Role = 'siswa'");
-        return NextResponse.json({ status: "success", exams: examsRes.rows, users: usersRes.rows, logo: LOGO_URL });
-    }
-    else {
-      return NextResponse.json({ status: "success", msg: "Berhasil diabaikan sementara", data: [] });
-    }
-    
-  } catch (error) {
-    return NextResponse.json({ status: "error", msg: error.message }, { status: 500 });
-  }
-}
-// ==========================================
     // TAMBAHAN: KELOLA HASIL / REKAP & UPLOAD EXCEL
     // ==========================================
     else if (action === "getRecapList") {
@@ -217,3 +201,20 @@ export async function POST(req) {
         await turso.execute({ sql: "DELETE FROM Results WHERE ResultID=?", args: [rid] });
         return NextResponse.json({ status: "success", msg: "Data ujian siswa direset!" });
     }
+    
+    // ==========================================
+    // 6. CETAK ADMINISTRASI & DEFAULT FALLBACK
+    // ==========================================
+    else if (action === "getAdminData") {
+        const examsRes = await turso.execute("SELECT * FROM Exams");
+        const usersRes = await turso.execute("SELECT * FROM Users WHERE Role = 'siswa'");
+        return NextResponse.json({ status: "success", exams: examsRes.rows, users: usersRes.rows, logo: LOGO_URL });
+    }
+    else {
+      return NextResponse.json({ status: "success", msg: "Berhasil diabaikan sementara", data: [] });
+    }
+    
+  } catch (error) {
+    return NextResponse.json({ status: "error", msg: error.message }, { status: 500 });
+  }
+}
