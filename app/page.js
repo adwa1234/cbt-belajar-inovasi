@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 export default function Page() {
   const [isMounted, setIsMounted] = useState(false);
 
+  // Mencegah Vercel Crash (Hydration Mismatch)
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -16,133 +17,40 @@ export default function Page() {
     window.appInitialized = true;
 
     // =================================================================
-    // 1. DEKLARASI GLOBAL & PROXY FETCH KE ROUTE.JS
+    // 1. DEKLARASI STATE GLOBAL
     // =================================================================
-    window.google = {
-      script: {
-        get run() {
-          const runner = { successFn: null, failureFn: null };
-          const proxy = new Proxy(runner, {
-            get: function (target, prop) {
-              if (prop === "withSuccessHandler") { return function (fn) { target.successFn = fn; return proxy; }; }
-              if (prop === "withFailureHandler") { return function (fn) { target.failureFn = fn; return proxy; }; }
-              if (prop === 'then' || prop === 'catch' || typeof prop === 'symbol') { return target[prop]; }
+    window.LOGO_BARU = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
+    window.examSubmitting = false;
+    window.user = null;
+    window.gData = {};
+    window.gAdminData = { exams: [], users: [] };
+    window.activeExamId = null;
+    window.activeExamViolations = 3;
+    window.totalQ = 0;
+    window.currentQuestionsData = [];
+    window.currentQIdx = 0;
+    window.recapAllData = [];
+    window.recapDataStore = {};
+    window.violationCount = 0;
+    window.isExamFinished = false;
+    window.violationLock = false;
+    window.matchState = {};
 
-              return function (...args) {
-                fetch("/api/cbt", {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: prop, args: args }),
-                })
-                .then(async (r) => {
-                   if (!r.ok) throw new Error(await r.text());
-                   return r.json();
-                })
-                .then((res) => { if (target.successFn) target.successFn(res); })
-                .catch((err) => { 
-                    console.error("API Fetch Error:", err);
-                    if (target.failureFn) target.failureFn(err); 
-                    else window.Swal.fire("Koneksi Error", err.message, "error");
-                });
-              };
-            }
-          });
-          return proxy;
-        }
-      }
-    };
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let finalBeepOsc = null;
+    let beepInterval = null;
 
-    window.applyMathJax = function() {
-        if (window.MathJax && window.MathJax.typesetPromise) {
-            window.MathJax.typesetPromise().catch((err) => console.log('MathJax Error:', err));
-        }
-    };
-
+    // =================================================================
+    // 2. FUNGSI INISIALISASI (MENUNGGU SCRIPT SIAP)
+    // =================================================================
     const initApp = () => {
+      // Tunggu library Next.js <Script> termuat sempurna
       if (!window.jQuery || !window.Swal || !window.XLSX) {
         setTimeout(initApp, 100);
         return;
       }
-      
+
       const $ = window.jQuery;
-      
-      // =================================================================
-      // 2. KONFIGURASI SUMMERNOTE DAN MATHJAX
-      // =================================================================
-      const MathButton = function (context) {
-          const ui = $.summernote.ui;
-          return ui.button({
-              contents: '<i class="fas fa-square-root-alt"></i> Rumus', tooltip: 'Tambahkan Rumus Matematika (LaTeX)',
-              click: function () {
-                  window.Swal.fire({
-                      title: 'Editor Rumus (LaTeX)', 
-                      html: `<div class="text-start small mb-2 text-muted">Ketik format LaTeX:</div>
-                             <textarea id="swal-math-input" class="form-control font-monospace" rows="3"></textarea>`,
-                      showCancelButton: true, confirmButtonText: 'Sisipkan'
-                  }).then((result) => { 
-                      if (result.isConfirmed) { 
-                          const mathText = document.getElementById('swal-math-input').value; 
-                          if(mathText) context.invoke('editor.insertText', ` $$ ${mathText} $$ `); 
-                      } 
-                  });
-              }
-          }).render();
-      };
-      
-      window.snConfig = { 
-          height: 180, 
-          toolbar: [['style', ['bold', 'italic', 'underline']], ['para', ['ul', 'ol']], ['insert', ['picture', 'table', 'math']]], 
-          buttons: { math: MathButton } 
-      };
-
-      // Inisialisasi fungsi lain (seperti openModal, renderContent, loadPage) yang sama dengan source file.
-      // Modifikasi pemanggilan toggleEditQ untuk menggunakan window.snConfig
-      window.toggleEditQ = function(uid) { 
-          const form = $('#form-'+uid); 
-          if (form.hasClass('hidden')) { 
-              window.activeUid = uid; form.removeClass('hidden'); $('#block-'+uid).addClass('border-primary'); 
-              $('#sn-'+uid).summernote(window.snConfig); 
-              window.renderAnsFields(uid, document.getElementById('type-'+uid).value);
-          } else { 
-              form.addClass('hidden'); $('#block-'+uid).removeClass('border-primary'); 
-              $('#sn-'+uid).summernote('destroy'); 
-              $('#ans-area-'+uid+' .summernote-opt').each(function(){ $(this).summernote('destroy'); }); 
-          } 
-      };
-
-      window.addOptRow = function(uid, t) { 
-          const el = $(window.genOptRow(uid, t));$('#opts-wrap-'+uid).append(el); 
-          el.find('.summernote-opt').summernote(window.snConfig); 
-      };
-    };
-
-    setTimeout(initApp, 300);
-
-  }, [isMounted]);
-
-  if (!isMounted) return <div style={{ width: '100vw', height: '100vh', backgroundColor: '#f1f5f9' }}></div>;
-
-  return (
-    <>
-      {/* Script & Style injection (seperti aslinya) */}
-      <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet" />
-      <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-      <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet" />
-      <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet" />
-
-      <Script src="https://code.jquery.com/jquery-3.6.0.min.js" strategy="beforeInteractive" />
-      <Script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" strategy="beforeInteractive" />
-      <Script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" strategy="beforeInteractive" />
-      <Script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js" strategy="beforeInteractive" />
-      <Script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" strategy="beforeInteractive" />
-      <Script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" strategy="lazyOnload" />
-
-      {/* HTML DOM Content (sama dengan aslinya) */}
-      <div dangerouslySetInnerHTML={{ __html: `... ` }} /> 
-    </>
-  );
-}
-
 
       // =================================================================
       // 3. FUNGSI NATIVE UI & KONTROL MODAL BOOTSTRAP
@@ -288,20 +196,44 @@ export default function Page() {
       window.initDash = function() {
           if(!window.user) return;
           
-          document.getElementById('view-auth').classList.add('hidden'); 
-          document.getElementById('view-auth').style.display = 'none'; 
-          document.getElementById('view-dashboard').classList.remove('hidden'); 
-          document.getElementById('view-dashboard').style.display = 'flex'; 
+          // 1. Tampilkan Dashboard & Sembunyikan Login
+          const viewAuth = document.getElementById('view-auth');
+          const viewDash = document.getElementById('view-dashboard');
+          if(viewAuth) { viewAuth.classList.add('hidden'); viewAuth.style.display = 'none'; }
+          if(viewDash) { viewDash.classList.remove('hidden'); viewDash.style.display = 'flex'; }
           
-          document.getElementById('u-name-disp').innerText = window.user.Nama;
+          // 2. Set Informasi User
+          const elName = document.getElementById('u-name-disp');
+          if(elName) elName.innerText = window.user.Nama;
+          
           const role = String(window.user.Role || '').trim().toLowerCase(); 
-          document.getElementById('user-role-disp').innerText = role.toUpperCase();
+          const elRole = document.getElementById('user-role-disp');
+          if(elRole) elRole.innerText = role.toUpperCase();
           
-          document.querySelectorAll('.components').forEach(el => el.classList.add('hidden'));
+          // 3. FIX UTAMA: Paksa sembunyikan SEMUA menu sidebar lebih dulu
+          const menuAdmin = document.getElementById('menu-admin');
+          const menuGuru = document.getElementById('menu-guru');
+          const menuSiswa = document.getElementById('menu-siswa');
           
-          if(role === 'siswa') { document.getElementById('menu-siswa').classList.remove('hidden'); window.loadPage('siswa-home'); } 
-          else if(role === 'guru') { document.getElementById('menu-guru').classList.remove('hidden'); window.loadPage('admin-home'); } 
-          else if(role === 'admin') { document.getElementById('menu-admin').classList.remove('hidden'); window.loadPage('admin-home'); } 
+          if(menuAdmin) { menuAdmin.style.display = 'none'; menuAdmin.classList.add('hidden'); }
+          if(menuGuru) { menuGuru.style.display = 'none'; menuGuru.classList.add('hidden'); }
+          if(menuSiswa) { menuSiswa.style.display = 'none'; menuSiswa.classList.add('hidden'); }
+          
+          // 4. Tampilkan HANYA menu yang sesuai dengan Role dan arahkan halamannya
+          if(role === 'siswa') { 
+              if(menuSiswa) { menuSiswa.style.display = 'block'; menuSiswa.classList.remove('hidden'); }
+              window.loadPage('siswa-home'); 
+          } 
+          else if(role === 'guru') { 
+              if(menuGuru) { menuGuru.style.display = 'block'; menuGuru.classList.remove('hidden'); }
+              window.loadPage('admin-home'); 
+          } 
+          else if(role === 'admin') { 
+              if(menuAdmin) { menuAdmin.style.display = 'block'; menuAdmin.classList.remove('hidden'); }
+              window.loadPage('admin-home'); 
+          } else {
+              window.Swal.fire('Error Role', 'Role user tidak valid!', 'error');
+          }
       };
 
       window.appRefresh = function() {
@@ -377,6 +309,12 @@ export default function Page() {
               $('#view-dashboard').addClass('hidden'); $('#view-dashboard').hide(); 
               $('#view-exam').addClass('hidden'); $('body').removeClass('exam-mode');
               $('#sidebar').removeClass('active'); $('#sidebar-overlay').removeClass('active');
+              
+              // FIX: Sembunyikan semua menu saat logout
+              ['menu-admin', 'menu-guru', 'menu-siswa'].forEach(id => {
+                  const m = document.getElementById(id);
+                  if(m) { m.style.display = 'none'; m.classList.add('hidden'); }
+              });
               
               document.getElementById('u-login').value = ''; document.getElementById('p-login').value = ''; 
               const authView = document.getElementById('view-auth');
