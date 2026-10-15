@@ -193,9 +193,10 @@ export default function Page() {
           }
       };
 
-      window.initDash = function() {
-          if(!window.user) return;
-          
+     window.initDash = function() {
+    if(window.showLoad) window.showLoad(false); // Tambahkan baris ini
+    if(!window.user) return;
+    
           // 1. Tampilkan Dashboard & Sembunyikan Login
           const viewAuth = document.getElementById('view-auth');
           const viewDash = document.getElementById('view-dashboard');
@@ -850,25 +851,31 @@ export default function Page() {
     initApp();
 
     const checkAutoLogin = () => {
-        const savedUser = localStorage.getItem('cbt_user');
-        if(savedUser) {
-            window.user = JSON.parse(savedUser);
-            const logoEl = document.querySelector('#logo-container img');
-            if (logoEl) logoEl.src = window.user.LogoUrl || window.LOGO_BARU;
-            
-            const authView = document.getElementById('view-auth');
-            const dashView = document.getElementById('view-dashboard');
-            if(authView) { authView.classList.add('hidden'); authView.style.display = 'none'; }
-            if(dashView) { dashView.classList.remove('hidden'); dashView.style.display = 'flex'; }
-            
-            window.initDash();
-            if(window.checkResumeExam) window.checkResumeExam();
-        } else {
-            window.showLoad(false);
-            const authView = document.getElementById('view-auth');
-            if(authView) { authView.classList.remove('hidden'); authView.style.display = 'flex'; }
-        }
-    };
+    // Tunggu sampai fungsi UI native siap
+    if (!window.showLoad) {
+        setTimeout(checkAutoLogin, 100);
+        return;
+    }
+
+    const savedUser = localStorage.getItem('cbt_user');
+    if(savedUser) {
+        window.user = JSON.parse(savedUser);
+        const logoEl = document.querySelector('#logo-container img');
+        if (logoEl) logoEl.src = window.user.LogoUrl || window.LOGO_BARU;
+        
+        const authView = document.getElementById('view-auth');
+        const dashView = document.getElementById('view-dashboard');
+        if(authView) { authView.classList.add('hidden'); authView.style.display = 'none'; }
+        if(dashView) { dashView.classList.remove('hidden'); dashView.style.display = 'flex'; }
+        
+        window.initDash();
+        if(window.checkResumeExam) window.checkResumeExam();
+    } else {
+        window.showLoad(false);
+        const authView = document.getElementById('view-auth');
+        if(authView) { authView.classList.remove('hidden'); authView.style.display = 'flex'; }
+    }
+};
     
     setTimeout(checkAutoLogin, 300);
 
@@ -959,7 +966,7 @@ export default function Page() {
           @keyframes spin { 100% { transform: rotate(360deg); } }
         </style>
 
-        <div id="loader" class="loader"><div class="spinner"></div></div>
+        <div id="loader" class="loader hidden"><div class="spinner"></div></div>
         <div id="sidebar-overlay" class="overlay" onclick="window.toggleSidebar()"></div>
         
         <!-- LAYAR LOGIN SPLIT -->
