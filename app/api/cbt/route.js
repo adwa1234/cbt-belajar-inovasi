@@ -7,13 +7,21 @@ export async function POST(req) {
     const { action, args } = body;
     const LOGO_URL = "https://lh3.googleusercontent.com/d/1V7RV4GJbNhX65Fv81QRhnAQxwSndHEGk";
 
+    // FUNGSI INIT DATABASE: Mencegah error "Table Not Found" di menu apapun
+    const initDB = async () => {
+        await turso.execute(`CREATE TABLE IF NOT EXISTS Users (ID TEXT PRIMARY KEY, Nama TEXT, Username TEXT UNIQUE, Password TEXT, Role TEXT, Sekolah TEXT, Kelas TEXT)`);
+        await turso.execute(`CREATE TABLE IF NOT EXISTS Exams (ExamID TEXT PRIMARY KEY, Judul TEXT, Mapel TEXT, TargetKelas TEXT, Durasi INTEGER, Status TEXT, Token TEXT, StartDate TEXT, EndDate TEXT, LimitTries INTEGER, ShowStats TEXT, RandomQ TEXT, PembuatID TEXT, MaxViolations INTEGER)`);
+        await turso.execute(`CREATE TABLE IF NOT EXISTS Results (ResultID TEXT PRIMARY KEY, SiswaID TEXT, ExamID TEXT, TotalNilai REAL, Detail TEXT, Pelanggaran TEXT, WaktuSubmit DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+        await turso.execute(`CREATE TABLE IF NOT EXISTS Questions (QID TEXT PRIMARY KEY, ExamID TEXT, Tipe TEXT, Pertanyaan TEXT, Options TEXT, KeyAnswer TEXT, Skor REAL, Nomor INTEGER, PembuatID TEXT)`);
+    };
+
     // ==========================================
     // 1. PROSES LOGIN & AUTO-SETUP DATABASE
     // ==========================================
     if (action === "loginUser") {
       const [username, password] = args;
       try {
-        await turso.execute(`CREATE TABLE IF NOT EXISTS Users (ID TEXT PRIMARY KEY, Nama TEXT, Username TEXT UNIQUE, Password TEXT, Role TEXT, Sekolah TEXT, Kelas TEXT)`);
+        await initDB();
         const checkAdmin = await turso.execute({ sql: "SELECT * FROM Users WHERE Username = ?", args: ["admin"] });
         
         if (checkAdmin.rows.length === 0) {
@@ -40,9 +48,7 @@ export async function POST(req) {
       const [role, userId, userClass] = args;
       const cleanRole = String(role).trim().toLowerCase();
       try {
-        await turso.execute(`CREATE TABLE IF NOT EXISTS Exams (ExamID TEXT PRIMARY KEY, Judul TEXT, Mapel TEXT, TargetKelas TEXT, Durasi INTEGER, Status TEXT, Token TEXT, StartDate TEXT, EndDate TEXT, LimitTries INTEGER, ShowStats TEXT, RandomQ TEXT, PembuatID TEXT, MaxViolations INTEGER)`);
-        await turso.execute(`CREATE TABLE IF NOT EXISTS Results (ResultID TEXT PRIMARY KEY, SiswaID TEXT, ExamID TEXT, TotalNilai REAL, Detail TEXT, Pelanggaran TEXT, WaktuSubmit DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-
+        await initDB();
         const examsRes = await turso.execute("SELECT * FROM Exams");
         const usersRes = await turso.execute("SELECT * FROM Users WHERE Role = 'siswa'");
         
@@ -75,6 +81,7 @@ export async function POST(req) {
     // 3. KELOLA SISWA (TAMBAH/EDIT/HAPUS)
     // ==========================================
     else if (action === "getUserList") {
+        await initDB();
         const usersRes = await turso.execute("SELECT * FROM Users");
         return NextResponse.json({ status: "success", data: usersRes.rows });
     }
@@ -131,7 +138,7 @@ export async function POST(req) {
     // 5. KELOLA SOAL UJIAN
     // ==========================================
     else if (action === "getExamQuestions") {
-        await turso.execute(`CREATE TABLE IF NOT EXISTS Questions (QID TEXT PRIMARY KEY, ExamID TEXT, Tipe TEXT, Pertanyaan TEXT, Options TEXT, KeyAnswer TEXT, Skor REAL, Nomor INTEGER, PembuatID TEXT)`);
+        await initDB();
         const [eid] = args;
         const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [eid] });
         return NextResponse.json(qRes.rows);
@@ -163,6 +170,7 @@ export async function POST(req) {
     // 6. KELOLA HASIL / REKAP & UPLOAD EXCEL
     // ==========================================
     else if (action === "getRecapList") {
+        await initDB();
         const [role, userId, userClass] = args;
         const res = await turso.execute(`
             SELECT r.*, u.Nama as nama, u.Kelas as kelas, e.Judul as ujian, e.Mapel as mapel, e.PembuatID as pembuat
@@ -175,7 +183,6 @@ export async function POST(req) {
         let finalData = res.rows;
         const cleanRole = String(role).trim().toLowerCase();
         
-        // Filter Jika yang login Guru, maka lihat hasil kelasnya saja
         if (cleanRole === "guru") {
             const kelasArr = String(userClass).split(',').map(k => k.trim().toLowerCase());
             finalData = finalData.filter(r => 
@@ -219,6 +226,7 @@ export async function POST(req) {
     // 7. CETAK ADMINISTRASI & DEFAULT FALLBACK
     // ==========================================
     else if (action === "getAdminData") {
+        await initDB();
         const examsRes = await turso.execute("SELECT * FROM Exams");
         const usersRes = await turso.execute("SELECT * FROM Users WHERE Role = 'siswa'");
         return NextResponse.json({ status: "success", exams: examsRes.rows, users: usersRes.rows, logo: LOGO_URL });
