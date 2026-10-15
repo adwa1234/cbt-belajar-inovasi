@@ -63,20 +63,27 @@ export default function Page() {
           }
       };
 
+      // FIX: Memindahkan elemen modal ke body agar tidak terjebak z-index React
       window.openModal = function(id) {
           const el = document.getElementById(id);
           if (!el) return;
+          
+          if (el.parentNode !== document.body) {
+              document.body.appendChild(el); 
+          }
+          
           if (window.bootstrap) {
               const modalInstance = window.bootstrap.Modal.getOrCreateInstance(el);
               modalInstance.show();
           } else {
               $(el).modal('show');
           }
+          
           // Paksa Z-Index ke Lapisan Terdepan
           setTimeout(() => {
-              document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '10500'; });
+              document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '10400'; });
               el.style.zIndex = '10505';
-          }, 150);
+          }, 100);
       };
 
       window.closeModal = function(id) {
@@ -305,7 +312,8 @@ export default function Page() {
           let h = `<div class="d-flex justify-content-between mb-3"><button class="btn btn-primary shadow-sm" onclick="window.openUserModal()">+ Tambah User Baru</button></div>`;
           h += `<div class="table-responsive bg-white rounded shadow-sm p-3"><table class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama Lengkap</th><th>Username</th><th>Role</th><th>Kelas</th><th>Aksi</th></tr></thead><tbody>`;
           users.forEach(u => {
-              const safeU = encodeURIComponent(JSON.stringify(u));
+              // FIX: Encode dengan replace karakter ' agar onclick tidak error
+              const safeU = encodeURIComponent(JSON.stringify(u)).replace(/'/g, "%27");
               h += `<tr><td class="fw-bold">${u.Nama}</td><td>${u.Username}</td><td><span class="badge bg-secondary">${u.Role}</span></td><td>${u.Kelas||'-'}</td>
               <td><button class="btn btn-sm btn-outline-primary me-1" onclick="window.openUserModal('${safeU}')"><i class="fas fa-edit"></i> Edit</button> 
               <button class="btn btn-sm btn-danger" onclick="window.delUser('${u.ID}')"><i class="fas fa-trash"></i></button></td></tr>`;
@@ -388,7 +396,8 @@ export default function Page() {
                   
                   exams.forEach(e => {
                       const isOwner = (String(window.user.Role).trim().toLowerCase() === 'admin' || String(e.PembuatID) === String(window.user.ID));
-                      const safeE = encodeURIComponent(JSON.stringify(e));
+                      // FIX: Encode dengan replace karakter ' agar onclick tidak error
+                      const safeE = encodeURIComponent(JSON.stringify(e)).replace(/'/g, "%27");
                       const actionButtons = isOwner ? `<button class="btn btn-sm btn-outline-dark flex-fill" onclick="window.openExamModal('${safeE}')">Edit</button> <button class="btn btn-sm btn-outline-primary flex-fill" onclick="window.manageQ('${e.ExamID}')"><i class="fas fa-list me-1"></i> Soal</button> <button class="btn btn-sm btn-danger" onclick="window.delExam('${e.ExamID}')"><i class="fas fa-trash"></i></button>` : `<div class="alert alert-light small m-0 p-1 text-center w-100">Read Only</div>`;
                       h += `<div class="col-md-6 col-lg-4 ujian-card" data-mapel="${e.Mapel}" data-kelas="${e.TargetKelas}"><div class="card h-100 shadow-sm border-0"><div class="card-body"><div class="d-flex justify-content-between mb-2"><span class="badge bg-primary">${e.Mapel}</span><span class="badge bg-light text-dark border">${e.TargetKelas}</span></div><h5 class="fw-bold text-dark">${e.Judul}</h5><div class="d-flex gap-2">${actionButtons}</div></div></div></div>`;
                   });
