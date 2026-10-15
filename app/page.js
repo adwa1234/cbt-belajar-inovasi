@@ -1108,7 +1108,7 @@ export default function Page() {
             </div>
         </div>
 
-        <!-- MODAL UJIAN (PASTIKAN PANGGIL closeModal YANG BENAR) -->
+        <!-- MODAL UJIAN -->
         <div class="modal fade" id="modalExam" tabindex="-1">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
