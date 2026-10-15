@@ -406,7 +406,8 @@ export default function Page() {
           let d = null;
           if(str) {
               try {
-                  d = JSON.parse(decodeURIComponent(str));
+                  // PERBAIKAN: Decode Base64 dengan aman
+                  d = JSON.parse(decodeURIComponent(atob(str)));
                   document.getElementById('ex-id').value = d.ExamID || '';
                   document.getElementById('ex-judul').value = d.Judul || '';
                   document.getElementById('ex-mapel').value = d.Mapel || '';
@@ -418,7 +419,11 @@ export default function Page() {
                   document.getElementById('ex-randomQ').checked = d.RandomQ === 'Yes';
                   document.getElementById('ex-showStats').checked = d.ShowStats === 'Yes';
                   document.getElementById('ex-violations').value = d.MaxViolations || 3;
-              } catch(e) { console.error("Parse Error:", e); }
+              } catch(e) {
+                  console.error("Gagal membaca data edit:", e);
+                  window.Swal.fire('Error', 'Data ujian rusak, tidak dapat diedit.', 'error');
+                  return;
+              }
           } else {
               document.getElementById('ex-violations').value = 3;
               document.getElementById('ex-limit').value = 1;
@@ -439,9 +444,9 @@ export default function Page() {
               container.innerHTML = htmlKelas;
           } else {
               let valKelas = d && d.TargetKelas ? d.TargetKelas : '';
-              // PERBAIKAN: Input tidak boleh tersembunyi/hilang saat reset
-              container.innerHTML = `<input type="text" id="ex-kelas" name="targetKelas" class="form-control" placeholder="Contoh: 7A, 7B" value="${valKelas}" required>`;
+              container.innerHTML = `<input type="text" id="ex-kelas" class="form-control" placeholder="Contoh: 7A, 7B" value="${valKelas}" required>`;
           }
+          
           window.openModal('modalExam');
       };
 
@@ -453,7 +458,7 @@ export default function Page() {
               let selectedKls = [];
               document.querySelectorAll('.kls-cb:checked').forEach(cb => selectedKls.push(cb.value));
               if (selectedKls.length === 0) {
-                  window.Swal.fire('Error', 'Pilih minimal 1 target kelas!', 'error'); return;
+                  window.Swal.fire('Perhatian', 'Pilih minimal 1 target kelas!', 'warning'); return;
               }
               targetKelas = selectedKls.join(', ');
           } else {
@@ -480,7 +485,7 @@ export default function Page() {
           };
 
           if (!d.judul || !d.mapel || !d.start || !d.end || !d.targetKelas) {
-              window.Swal.fire('Error', 'Lengkapi data wajib!', 'error'); return;
+              window.Swal.fire('Error', 'Lengkapi semua kolom data yang wajib!', 'error'); return;
           }
 
           const btn = document.querySelector('#frm-exam button[type="submit"]');
@@ -491,22 +496,21 @@ export default function Page() {
           window.google.script.run.withSuccessHandler((res) => {
               if(res.status === 'success') {
                   window.closeModal('modalExam');
-                  window.showLoad(true); // PERBAIKAN: Tampilkan loader saat refresh dashboard agar tidak glitch
-                  window.google.script.run.withSuccessHandler(res2 => {
-                      window.showLoad(false);
-                      btn.innerHTML = origBtn; btn.disabled = false;
-                      if (res2.status === 'success') { 
-                          window.gData = res2.data; window.renderContent('admin-ujian'); window.toast('success', 'Jadwal Disimpan!'); 
-                      } else { window.Swal.fire('Gagal', res2.msg, 'error'); }
-                  }).withFailureHandler(err => { 
-                      window.showLoad(false); btn.innerHTML = origBtn; btn.disabled = false; window.Swal.fire('Error', err.message, 'error'); 
-                  }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas);
+                  // PERBAIKAN: Refresh dashboard langsung setelah menyimpan agar jadwal baru muncul
+                  window.Swal.fire('Sukses', 'Jadwal berhasil disimpan!', 'success').then(() => {
+                      window.showLoad(true);
+                      window.loadPage('admin-ujian');
+                  });
               } else { 
                   btn.innerHTML = origBtn; btn.disabled = false;
-                  window.Swal.fire('Gagal', res.msg, 'error'); 
+                  window.Swal.fire('Gagal Menyimpan', res.msg, 'error'); 
               }
-          }).withFailureHandler(err => { btn.innerHTML = origBtn; btn.disabled = false; window.Swal.fire('Error', err.message, 'error'); }).adminSaveExam(d);
+          }).withFailureHandler(err => { 
+              btn.innerHTML = origBtn; btn.disabled = false; 
+              window.Swal.fire('Koneksi Error', err.message, 'error'); 
+          }).adminSaveExam(d);
       };
+
 
       window.delExam = function(id) { 
           window.Swal.fire({title:'Hapus Jadwal?', icon:'warning', showCancelButton:true, confirmButtonColor: '#d33'}).then(r=>{
@@ -550,16 +554,18 @@ export default function Page() {
                           </div>
                        </div><div class="row g-4" id="admin-ujian-list">`;
                   
-                      exams.forEach(e => {
+                  exams.forEach(e => {
                       const isOwner = (String(window.user.Role).trim().toLowerCase() === 'admin' || String(e.PembuatID) === String(window.user.ID));
-                      // PERBAIKAN: Menambahkan replace(/'/g, "%27") agar tombol Edit/Hapus merespon saat diklik
-                      const safeE = encodeURIComponent(JSON.stringify(e)).replace(/'/g, "%27");
+                      
+                      // PERBAIKAN: Gunakan Base64 agar string JSON aman dari kerusakan tanda kutip di HTML
+                      const safeE = btoa(encodeURIComponent(JSON.stringify(e)));
                       
                       const actionButtons = isOwner ? `<button class="btn btn-sm btn-outline-dark flex-fill" onclick="window.openExamModal('${safeE}')">Edit</button> <button class="btn btn-sm btn-outline-primary flex-fill" onclick="window.manageQ('${e.ExamID}')"><i class="fas fa-list me-1"></i> Soal</button> <button class="btn btn-sm btn-danger" onclick="window.delExam('${e.ExamID}')"><i class="fas fa-trash"></i></button>` : `<div class="alert alert-light small m-0 p-1 text-center w-100">Read Only</div>`;
                       h += `<div class="col-md-6 col-lg-4 ujian-card" data-mapel="${e.Mapel}" data-kelas="${e.TargetKelas}"><div class="card h-100 shadow-sm border-0"><div class="card-body"><div class="d-flex justify-content-between mb-2"><span class="badge bg-primary">${e.Mapel}</span><span class="badge bg-light text-dark border">${e.TargetKelas}</span></div><h5 class="fw-bold text-dark">${e.Judul}</h5><div class="d-flex gap-2">${actionButtons}</div></div></div></div>`;
                   });
-
+                  h += '</div>';
               }
+
               else if (page === 'siswa-home') {
                   let availExams = window.gData?.availableExams || [];
                   let historyData = window.gData?.history || [];
