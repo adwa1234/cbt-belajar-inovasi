@@ -108,19 +108,16 @@ export default function Page() {
       window.openModal = function(id) {
           const el = document.getElementById(id);
           if (!el) return;
-          // Pindahkan modal ke body agar tidak tertimpa backdrop z-index
-          if(el.parentNode !== document.body) { document.body.appendChild(el); }
-          
+          // PERBAIKAN: Tidak memindahkan DOM node, hanya paksa z-index agar input form tetap berfungsi
           if (window.bootstrap) {
               window.bootstrap.Modal.getOrCreateInstance(el).show();
           } else {
               $(el).modal('show');
           }
-          
           setTimeout(() => {
               el.style.zIndex = '10505';
               document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '10500'; });
-          }, 50);
+          }, 100);
       };
 
       window.closeModal = function(id) {
@@ -418,8 +415,8 @@ export default function Page() {
                   if(availExams.length === 0) { h += '<div class="col-12"><div class="alert alert-info text-center">Tidak ada ujian aktif saat ini.</div></div>'; } 
                   else {
                       availExams.forEach(e => {
-                          // Filter Batas Pengerjaan (LimitTries)
-                          let historyCount = historyData.filter(hx => hx.ExamID === e.ExamID).length;
+                          // PERBAIKAN: Filter Batas Pengerjaan (LimitTries) Secara Akurat
+                          let historyCount = historyData.filter(hx => String(hx.ExamID) === String(e.ExamID)).length;
                           let limit = Number(e.LimitTries || e.Limit) || 1;
                           if (historyCount >= limit) { e.IsFinished = true; }
                           
@@ -430,7 +427,7 @@ export default function Page() {
                       });
                   }
                   
-                  // Grouping & Filter Dinamis untuk Riwayat Mapel
+                  // PERBAIKAN: Grouping & Filter Dinamis untuk Riwayat Mapel
                   let groupedHistory = {};
                   historyData.forEach(r => {
                       let mapel = r.Mapel || 'Umum';
@@ -986,7 +983,6 @@ export default function Page() {
       // 8. FUNGSI UJIAN SISWA (START, RUN, SUBMIT, SECURITY)
       // =================================================================
       window.startExam = function(eid) {
-          if(audioCtx && audioCtx.state === 'suspended') { audioCtx.resume(); }
           try { if (screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); } } catch (e) {}
 
           const rules = `<div class="text-start small">
@@ -998,6 +994,9 @@ export default function Page() {
           </div>`;
           window.Swal.fire({ title: 'Peraturan Ujian', html: rules, icon: 'warning', showCancelButton: true, confirmButtonText: 'SETUJU & MULAI', confirmButtonColor: '#1e3a8a' }).then(r => {
               if(r.isConfirmed) {
+                  // PERBAIKAN: Aktifkan Alarm Audio di sini, segera setelah ada interaksi (klik) dari pengguna
+                  if(audioCtx && audioCtx.state === 'suspended') { audioCtx.resume(); }
+
                   if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch((err) => {}); }
                   window.showLoad(true);
                   window.google.script.run.withSuccessHandler(res => {
@@ -1319,16 +1318,15 @@ export default function Page() {
           
           $('#ans-area-'+uid+' .summernote-opt').each(function(){ $(this).summernote('destroy'); }); let h = '';
           
+          // PERBAIKAN: Fungsi pembersih string HTML agar membandingkan isi kunci jawaban secara akurat
+          const cleanStr = (s) => String(s).replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
+
           if (type === 'PGS' || type === 'PGK') { 
               const inputType = type === 'PGS' ? 'radio' : 'checkbox';
               h = `<button type="button" class="btn btn-outline-primary btn-sm mb-2" onclick="window.addOptRow('${uid}', '${inputType}')">+ Opsi</button><div id="opts-wrap-${uid}">`; 
               if(opts.length) {
                   opts.forEach(o => {
-                      let isChecked = '';
-                      // Fix pencocokan keys dengan menghapus tag html dan spasi berlebih
-                      keys.forEach(k => { 
-                          if(String(k).replace(/<[^>]*>?/gm, '').trim() === String(o).replace(/<[^>]*>?/gm, '').trim()) isChecked = 'checked'; 
-                      });
+                      let isChecked = keys.some(k => cleanStr(k) === cleanStr(o)) ? 'checked' : '';
                       h += window.genOptRow(uid, inputType, o, isChecked);
                   });
               } else { h += window.genOptRow(uid, inputType); }
@@ -1392,8 +1390,7 @@ export default function Page() {
               keys = form.find('textarea[name="essay_key"]').val().split(','); 
           } 
           
-          const payload = { id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID }; 
-          
+          const payload={id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID}; 
           const btn = form.find('button.btn-success');
           const origText = btn.html();
           btn.prop('disabled',true).html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...');
@@ -1493,7 +1490,7 @@ export default function Page() {
               opts.forEach((o,x)=> { inp+=`<tr><td style="padding:10px;">${o}</td><td style="padding:10px; text-align:center; vertical-align:middle;"><input type="radio" name="ans-${q.QID}-${x}" value="B" style="transform:scale(1.2);"></td><td style="padding:10px; text-align:center; vertical-align:middle;"><input type="radio" name="ans-${q.QID}-${x}" value="S" style="transform:scale(1.2);"></td></tr>`; });
               inp += `</tbody></table>`;
           } else if(q.Tipe==='Menjodohkan') {
-              const lItems = JSON.parse(q.Options||"[]"); let rItems = []; try { rItems = [...JSON.parse(q.Key||"[]")].sort(() => Math.random() - 0.5); } catch(e){}
+              const lItems = JSON.parse(q.Options||"[]"); let rItems = []; try { rItems = [...JSON.parse(q.KeyAnswer||q.Key||"[]")].sort(() => Math.random() - 0.5); } catch(e){}
               inp = `<div style="display:flex; justify-content:space-between; gap:20px; margin-top:15px;"><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${lItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div><div style="flex:1; display:flex; flex-direction:column; gap:10px;">${rItems.map((t)=>`<div style="border:2px solid #e2e8f0; padding:10px; border-radius:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);">${t}</div>`).join('')}</div></div>`;
           } else if(q.Tipe.includes('PG')) {
               const opts = JSON.parse(q.Options||"[]");
@@ -1512,31 +1509,31 @@ export default function Page() {
     initApp();
 
     const checkAutoLogin = () => {
-    // Tunggu sampai fungsi UI native siap
-    if (!window.showLoad) {
-        setTimeout(checkAutoLogin, 100);
-        return;
-    }
+        // Tunggu sampai fungsi UI native siap
+        if (!window.showLoad) {
+            setTimeout(checkAutoLogin, 100);
+            return;
+        }
 
-    const savedUser = localStorage.getItem('cbt_user');
-    if(savedUser) {
-        window.user = JSON.parse(savedUser);
-        const logoEl = document.querySelector('#logo-container img');
-        if (logoEl) logoEl.src = window.user.LogoUrl || window.LOGO_BARU;
-        
-        const authView = document.getElementById('view-auth');
-        const dashView = document.getElementById('view-dashboard');
-        if(authView) { authView.classList.add('hidden'); authView.style.display = 'none'; }
-        if(dashView) { dashView.classList.remove('hidden'); dashView.style.display = 'flex'; }
-        
-        window.initDash();
-        if(window.checkResumeExam) window.checkResumeExam();
-    } else {
-        window.showLoad(false);
-        const authView = document.getElementById('view-auth');
-        if(authView) { authView.classList.remove('hidden'); authView.style.display = 'flex'; }
-    }
-};
+        const savedUser = localStorage.getItem('cbt_user');
+        if(savedUser) {
+            window.user = JSON.parse(savedUser);
+            const logoEl = document.querySelector('#logo-container img');
+            if (logoEl) logoEl.src = window.user.LogoUrl || window.LOGO_BARU;
+            
+            const authView = document.getElementById('view-auth');
+            const dashView = document.getElementById('view-dashboard');
+            if(authView) { authView.classList.add('hidden'); authView.style.display = 'none'; }
+            if(dashView) { dashView.classList.remove('hidden'); dashView.style.display = 'flex'; }
+            
+            window.initDash();
+            if(window.checkResumeExam) window.checkResumeExam();
+        } else {
+            window.showLoad(false);
+            const authView = document.getElementById('view-auth');
+            if(authView) { authView.classList.remove('hidden'); authView.style.display = 'flex'; }
+        }
+    };
     
     setTimeout(checkAutoLogin, 300);
 
