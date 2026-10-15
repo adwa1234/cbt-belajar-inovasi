@@ -45,7 +45,6 @@ export default function Page() {
     // 2. FUNGSI INISIALISASI (MENUNGGU SCRIPT SIAP)
     // =================================================================
     const initApp = () => {
-      // Tunggu library Next.js <Script> termuat sempurna
       if (!window.jQuery || !window.Swal || !window.XLSX) {
         setTimeout(initApp, 100);
         return;
@@ -95,7 +94,7 @@ export default function Page() {
       };
 
       // =================================================================
-      // 4. FUNGSI NATIVE UI & MANAJEMEN CACHE CBT
+      // 4. FUNGSI NATIVE UI & MANAJEMEN MODAL/CACHE
       // =================================================================
       window.showLoad = function(show) {
           const loader = document.getElementById('loader');
@@ -105,15 +104,15 @@ export default function Page() {
           }
       };
 
-      // PERBAIKAN: Sistem Reset Cache Tanpa Mengorbankan Sesi Login
+      // PERBAIKAN: Reset Cache Aman, Tidak Logout Akun
       window.handleResetCache = function() {
           window.Swal.fire({
               title: 'Sinkronisasi & Reset Cache?',
-              text: 'Ini akan membersihkan memori sementara agar aplikasi lebih ringan dan data soal/ujian terupdate. Sesi login Anda tetap dipertahankan.',
-              icon: 'info',
+              text: 'Ini akan membersihkan data sementara di browser Anda dan menyegarkan sistem agar berjalan lancar tanpa membebani database. Sesi login Anda akan tetap aman.',
+              icon: 'warning',
               showCancelButton: true,
-              confirmButtonColor: '#3085d6',
-              confirmButtonText: 'Ya, Bersihkan!'
+              confirmButtonColor: '#d33',
+              confirmButtonText: 'Ya, Bersihkan & Refresh'
           }).then((r) => {
               if (r.isConfirmed) {
                   window.showLoad(true);
@@ -121,42 +120,42 @@ export default function Page() {
                   localStorage.clear();
                   sessionStorage.clear();
                   if(savedUser) localStorage.setItem('cbt_user', savedUser);
-                  localStorage.setItem('cbt_app_version', 'v21_final'); 
+                  localStorage.setItem('cbt_app_version', 'v22_final_fix');
                   
                   window.toast('success', 'Cache berhasil dibersihkan!');
-                  setTimeout(() => { window.location.reload(true); }, 1000);
+                  setTimeout(() => { window.location.reload(true); }, 800);
               }
           });
       };
 
-      // PERBAIKAN: Modal kini dijamin muncul tanpa terhalang backdrop dan form tetap interaktif
+      // PERBAIKAN: Manajemen Modal Diperbarui agar Form Berfungsi Normal
       window.openModal = function(id) {
           const el = document.getElementById(id);
           if (!el) return;
-          
-          if(window.jQuery) {
+          if (window.bootstrap) {
+              let m = window.bootstrap.Modal.getInstance(el);
+              if (!m) m = new window.bootstrap.Modal(el);
+              m.show();
+          } else if (window.jQuery) {
               window.jQuery(el).modal('show');
-          } else if (window.bootstrap) {
-              window.bootstrap.Modal.getOrCreateInstance(el).show();
           }
-
+          
           setTimeout(() => {
               el.style.zIndex = '10505';
               document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '10500'; });
-          }, 150);
+          }, 100);
       };
 
       window.closeModal = function(id) {
           const el = document.getElementById(id);
           if (!el) return;
-          
-          if(window.jQuery) {
-              window.jQuery(el).modal('hide');
-          } else if (window.bootstrap) {
-              const m = window.bootstrap.Modal.getInstance(el);
+          if (window.bootstrap) {
+              let m = window.bootstrap.Modal.getInstance(el);
               if(m) m.hide();
+          } else if (window.jQuery) {
+              window.jQuery(el).modal('hide');
           }
-
+          
           setTimeout(() => {
               document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
               document.body.classList.remove('modal-open');
@@ -222,7 +221,7 @@ export default function Page() {
       };
 
       // =================================================================
-      // 6. LOGIKA HALAMAN, LOGIN & MENU (ANTI TUMPANG TINDIH)
+      // 6. LOGIKA HALAMAN, LOGIN & MENU
       // =================================================================
       window.handleLogin = async function() {
           const u = document.getElementById('u-login').value;
@@ -428,7 +427,6 @@ export default function Page() {
                   let availExams = window.gData?.availableExams || [];
                   let historyData = window.gData?.history || [];
                   
-                  // Petakan Judul & Mapel ke Data History untuk Filter Grouping
                   historyData = historyData.map(h => {
                       let ex = availExams.find(e => e.ExamID === h.ExamID) || window.gData?.exams?.find(e => e.ExamID === h.ExamID) || {};
                       return {
@@ -443,7 +441,6 @@ export default function Page() {
                   if(availExams.length === 0) { h += '<div class="col-12"><div class="alert alert-info text-center">Tidak ada ujian aktif saat ini.</div></div>'; } 
                   else {
                       availExams.forEach(e => {
-                          // PERBAIKAN: Filter Batas Pengerjaan (LimitTries) Secara Akurat
                           let historyCount = historyData.filter(hx => String(hx.ExamID) === String(e.ExamID)).length;
                           let limit = Number(e.LimitTries || e.Limit) || 1;
                           if (historyCount >= limit) { e.IsFinished = true; }
@@ -455,7 +452,6 @@ export default function Page() {
                       });
                   }
                   
-                  // PERBAIKAN: Grouping & Filter Dinamis untuk Riwayat Mapel
                   let groupedHistory = {};
                   historyData.forEach(r => {
                       let mapel = r.Mapel || 'Umum';
@@ -491,7 +487,6 @@ export default function Page() {
           }
       };
 
-      // FUNGSI PENDUKUNG FILTER RIWAYAT SISWA
       window.filterRiwayatSiswa = function(val) {
           document.querySelectorAll('.riwayat-group').forEach(group => {
               if(!val || group.getAttribute('data-mapel') === val) group.style.display = '';
@@ -642,6 +637,8 @@ export default function Page() {
           h += `</tbody></table></div></div></div>`;
           document.getElementById('content-area').innerHTML = h;
       };
+
+      window.openKatrolModal = function() { window.openModal('modalKatrol'); };
 
       window.renderRecapTable = function() {
           const uniqueKelas = [...new Set(window.recapAllData.map(item => item.KelasSiswa))].filter(k => k).sort();
@@ -1022,7 +1019,7 @@ export default function Page() {
           </div>`;
           window.Swal.fire({ title: 'Peraturan Ujian', html: rules, icon: 'warning', showCancelButton: true, confirmButtonText: 'SETUJU & MULAI', confirmButtonColor: '#1e3a8a' }).then(r => {
               if(r.isConfirmed) {
-                  // PERBAIKAN: Aktifkan Alarm Audio di sini, segera setelah ada interaksi (klik)
+                  // PERBAIKAN: Aktifkan Alarm Audio dengan pasti saat setuju ujian
                   if(audioCtx && audioCtx.state === 'suspended') { audioCtx.resume(); }
 
                   if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch((err) => {}); }
@@ -1253,7 +1250,7 @@ export default function Page() {
       window.redrawMatchLines = function(qIdx, savedArr, rightItems) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; if(Array.isArray(savedArr)) { window.matchState[qIdx].pairs = []; savedArr.forEach((val, lIdx) => { if(val) { const rIdx = rightItems.indexOf(val); if(rIdx > -1) { window.matchState[qIdx].pairs.push({ left: lIdx, right: rIdx, rightVal: val }); } } }); window.drawLines(qIdx); } };
       
       // =================================================================
-      // 9. EDITOR SOAL SUMMERNOTE (KUNCI JAWABAN FIX)
+      // 9. EDITOR SOAL SUMMERNOTE & KUNCI JAWABAN
       // =================================================================
       window.manageQ = function(id) { 
           window.activeExamId = id; 
@@ -1349,10 +1346,13 @@ export default function Page() {
           
           $('#ans-area-'+uid+' .summernote-opt').each(function(){ $(this).summernote('destroy'); }); let h = '';
           
-          // PERBAIKAN: Membersihkan sisa HTML tag saat mencocokkan string kunci dan opsi
+          // PERBAIKAN PENTING: Extractor DOM Text Murni untuk mencocokkan string kunci dan opsi secara presisi 100%
           const cleanStr = (s) => {
               if(s === null || s === undefined) return '';
-              return String(s).replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, '').trim();
+              let div = document.createElement('div');
+              div.innerHTML = String(s);
+              let text = div.textContent || div.innerText || "";
+              return text.replace(/\s+/g, '').trim().toLowerCase();
           };
 
           if (type === 'PGS' || type === 'PGK') { 
@@ -1538,7 +1538,7 @@ export default function Page() {
     };
 
     // =================================================================
-    // 10. INISIALISASI AUTO-LOGIN & PATCH CACHE
+    // 10. INISIALISASI AUTO-LOGIN & PAKSA HAPUS CACHE LAMA
     // =================================================================
     initApp();
 
@@ -1548,7 +1548,9 @@ export default function Page() {
             return;
         }
 
-        const APP_VERSION = 'v21_final';
+        // PERBAIKAN FINAL: Paksa browser membersihkan cache saat pertama reload (v22_final_fix)
+        // Data user dipertahankan, mencegah error render komponen.
+        const APP_VERSION = 'v22_final_fix';
         if(localStorage.getItem('cbt_app_version') !== APP_VERSION) {
             const savedUser = localStorage.getItem('cbt_user');
             localStorage.clear();
@@ -1583,6 +1585,7 @@ export default function Page() {
 
   }, [isMounted]);
 
+  // Layar Pemuatan Utama untuk Mengelabui Vercel Hydration
   if (!isMounted) return <div style={{ width: '100vw', height: '100vh', backgroundColor: '#f1f5f9' }}></div>;
 
  return (
