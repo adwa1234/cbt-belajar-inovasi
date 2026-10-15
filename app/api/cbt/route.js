@@ -111,7 +111,7 @@ export async function POST(req) {
     else if (action === "adminDeleteExam") {
         const [id] = args;
         await turso.execute({ sql: "DELETE FROM Exams WHERE ExamID = ?", args: [id] });
-        await turso.execute({ sql: "DELETE FROM Questions WHERE ExamID = ?", args: [id] }); // Hapus soal terkait
+        await turso.execute({ sql: "DELETE FROM Questions WHERE ExamID = ?", args: [id] });
         return NextResponse.json({ status: "success", msg: "Jadwal dihapus!" });
     }
 
@@ -185,7 +185,7 @@ export async function POST(req) {
     }
     
     // ==========================================
-    // 7. FITUR UJIAN SISWA (Frontend Request)
+    // 7. FITUR UJIAN SISWA & PENILAIAN AKURAT
     // ==========================================
     else if (action === "getExamPack") {
         const [eid, uid] = args;
@@ -204,7 +204,6 @@ export async function POST(req) {
         let totalScore = 0; let maxScore = 0; let detailLog = [];
 
         // PERBAIKAN: Fungsi pembersih string agar pencocokan jawaban 100% akurat 
-        // Mengabaikan sisa tag HTML, spasi, dan huruf besar/kecil
         const cleanStr = (s) => {
             if (s === null || s === undefined) return '';
             return String(s).replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, '').trim().toLowerCase();
@@ -214,7 +213,6 @@ export async function POST(req) {
             const userAns = ansArr.find(a => String(a.qid) === String(q.QID));
             const ansVal = userAns ? userAns.answer : '';
             
-            // Parsing KeyAnswer dengan aman
             let rawKeys = q.KeyAnswer || q.Key || "[]";
             let keyArr = [];
             try { 
@@ -225,7 +223,6 @@ export async function POST(req) {
             const skorItem = Number(q.Skor || 10);
             let earned = 0;
 
-            // Logika Penilaian
             if (q.Tipe === 'PGS') {
                 if (cleanStr(ansVal) === cleanStr(keyArr[0])) earned = skorItem;
             } 
@@ -244,6 +241,9 @@ export async function POST(req) {
                     }
                 });
                 earned = keyArr.length > 0 ? (correctCount / keyArr.length) * skorItem : 0;
+            } 
+            else if (q.Tipe === 'Uraian') {
+                earned = 0; // Uraian tidak dinilai otomatis
             }
 
             maxScore += skorItem;
@@ -251,7 +251,6 @@ export async function POST(req) {
             detailLog.push({ i: q.Nomor, s: Number(earned.toFixed(2)), m: skorItem, t: q.Tipe, a: ansVal });
         });
 
-        // Kalkulasi ke skala 100
         const finalScore = maxScore > 0 ? Number(((totalScore / maxScore) * 100).toFixed(2)) : 0;
         const rid = 'RES' + Date.now() + Math.floor(Math.random() * 1000);
         
@@ -262,3 +261,16 @@ export async function POST(req) {
         
         return NextResponse.json({ status: "success", msg: "Jawaban tersimpan", data: { score: finalScore } });
     }
+    else if (action === "autosaveAnswer" || action === "updateClientProgress") {
+        return NextResponse.json({ status: "success" });
+    }
+    else if (action === "getLiveMonitoring") {
+        return NextResponse.json({ status: "success", data: [] });
+    }
+
+    return NextResponse.json({ status: "error", msg: "Aksi tidak dikenali" });
+
+  } catch (error) {
+    return NextResponse.json({ status: "error", msg: error.message }, { status: 500 });
+  }
+}
