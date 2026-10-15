@@ -531,6 +531,32 @@ export default function Page() {
           }); 
       };
 
+      window.openKoreksi = function(rid) {
+          const d = window.recapDataStore[rid]; 
+          if (!d) {
+              window.Swal.fire('Error', 'Data riwayat tidak ditemukan.', 'error');
+              return;
+          }
+          let detailArr = []; 
+          try { detailArr = JSON.parse(d.detail); } catch(e){ console.error("Koreksi Parse Error:", e); }
+          
+          let html = `<input type="hidden" id="kor-rid" value="${rid}"><div class="alert alert-info border-0 shadow-sm">Siswa: <b>${d.nama}</b><br>Ujian: <b>${d.ujian}</b></div>`;
+          html += `<div class="alert alert-warning mb-3">Total Nilai Saat Ini: <b class="fs-5">${d.nilai}</b><br>Anda dapat memodifikasi skor per soal di bawah ini.</div>`;
+          
+          detailArr.forEach((item, index) => {
+              let no = item.i !== undefined ? item.i : item[0]; 
+              let score = item.s !== undefined ? item.s : item[1]; 
+              let type = item.t || 'Objektif'; 
+              let ans = item.a !== undefined ? item.a : ''; 
+              let max = item.m !== undefined ? item.m : 0;
+              
+              html += `<div class="card mb-2 border-0 shadow-sm"><div class="card-body p-3"><div class="d-flex justify-content-between align-items-center mb-2"><strong class="text-primary">Soal No. ${no} <span class="badge bg-secondary ms-1">${type}</span></strong><div class="fw-bold d-flex align-items-center">Skor: <input type="number" step="0.1" class="form-control form-control-sm d-inline w-auto kor-score ms-2" data-idx="${index}" value="${score}" style="max-width: 80px;"> <span class="ms-1 text-muted">/ ${max}</span></div></div>`;
+              let displayAns = Array.isArray(ans) ? ans.join(', ') : ans;
+              html += `<div class="p-2 bg-light rounded border small mt-2"><b>Jawaban Siswa:</b><br>${displayAns ? String(displayAns).replace(/\n/g, '<br>') : '<i class="text-muted">Tidak dijawab</i>'}</div></div></div>`;
+          });
+          document.getElementById('kor-body').innerHTML = html;
+          window.openModal('modalKoreksi');
+      };
 
       // =================================================================
       // 7. RENDER KONTEN DASHBOARD
