@@ -45,7 +45,6 @@ export default function Page() {
     // 2. FUNGSI INISIALISASI (MENUNGGU SCRIPT SIAP)
     // =================================================================
     const initApp = () => {
-      // Tunggu library Next.js <Script> termuat sempurna
       if (!window.jQuery || !window.Swal || !window.XLSX) {
         setTimeout(initApp, 100);
         return;
@@ -95,7 +94,7 @@ export default function Page() {
       };
 
       // =================================================================
-      // 4. FUNGSI NATIVE UI & KONTROL MODAL BOOTSTRAP
+      // 4. FUNGSI NATIVE UI & RESET CACHE
       // =================================================================
       window.showLoad = function(show) {
           const loader = document.getElementById('loader');
@@ -105,10 +104,27 @@ export default function Page() {
           }
       };
 
+      window.handleResetCache = function() {
+          window.Swal.fire({
+              title: 'Reset Cache Sistem?',
+              text: 'Ini akan membersihkan data sementara di browser Anda dan menyegarkan sistem agar berjalan lancar tanpa error. Anda akan diminta login kembali.',
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonColor: '#d33',
+              confirmButtonText: 'Ya, Bersihkan & Reset'
+          }).then((r) => {
+              if (r.isConfirmed) {
+                  window.showLoad(true);
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  setTimeout(() => { window.location.reload(true); }, 1000);
+              }
+          });
+      };
+
       window.openModal = function(id) {
           const el = document.getElementById(id);
           if (!el) return;
-          // PERBAIKAN: Tidak memindahkan DOM node, hanya paksa z-index agar input form tetap berfungsi
           if (window.bootstrap) {
               window.bootstrap.Modal.getOrCreateInstance(el).show();
           } else {
@@ -194,7 +210,7 @@ export default function Page() {
       };
 
       // =================================================================
-      // 6. LOGIKA HALAMAN, LOGIN & MENU (ANTI TUMPANG TINDIH)
+      // 6. LOGIKA HALAMAN, LOGIN & MENU
       // =================================================================
       window.handleLogin = async function() {
           const u = document.getElementById('u-login').value;
@@ -400,7 +416,6 @@ export default function Page() {
                   let availExams = window.gData?.availableExams || [];
                   let historyData = window.gData?.history || [];
                   
-                  // Petakan Judul & Mapel ke Data History untuk Filter Grouping
                   historyData = historyData.map(h => {
                       let ex = availExams.find(e => e.ExamID === h.ExamID) || window.gData?.exams?.find(e => e.ExamID === h.ExamID) || {};
                       return {
@@ -415,7 +430,6 @@ export default function Page() {
                   if(availExams.length === 0) { h += '<div class="col-12"><div class="alert alert-info text-center">Tidak ada ujian aktif saat ini.</div></div>'; } 
                   else {
                       availExams.forEach(e => {
-                          // PERBAIKAN: Filter Batas Pengerjaan (LimitTries) Secara Akurat
                           let historyCount = historyData.filter(hx => String(hx.ExamID) === String(e.ExamID)).length;
                           let limit = Number(e.LimitTries || e.Limit) || 1;
                           if (historyCount >= limit) { e.IsFinished = true; }
@@ -427,7 +441,6 @@ export default function Page() {
                       });
                   }
                   
-                  // PERBAIKAN: Grouping & Filter Dinamis untuk Riwayat Mapel
                   let groupedHistory = {};
                   historyData.forEach(r => {
                       let mapel = r.Mapel || 'Umum';
@@ -463,7 +476,6 @@ export default function Page() {
           }
       };
 
-      // FUNGSI PENDUKUNG FILTER RIWAYAT SISWA
       window.filterRiwayatSiswa = function(val) {
           document.querySelectorAll('.riwayat-group').forEach(group => {
               if(!val || group.getAttribute('data-mapel') === val) group.style.display = '';
@@ -994,7 +1006,6 @@ export default function Page() {
           </div>`;
           window.Swal.fire({ title: 'Peraturan Ujian', html: rules, icon: 'warning', showCancelButton: true, confirmButtonText: 'SETUJU & MULAI', confirmButtonColor: '#1e3a8a' }).then(r => {
               if(r.isConfirmed) {
-                  // PERBAIKAN: Aktifkan Alarm Audio di sini, segera setelah ada interaksi (klik) dari pengguna
                   if(audioCtx && audioCtx.state === 'suspended') { audioCtx.resume(); }
 
                   if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch((err) => {}); }
@@ -1318,8 +1329,11 @@ export default function Page() {
           
           $('#ans-area-'+uid+' .summernote-opt').each(function(){ $(this).summernote('destroy'); }); let h = '';
           
-          // PERBAIKAN: Fungsi pembersih string HTML agar membandingkan isi kunci jawaban secara akurat
-          const cleanStr = (s) => String(s).replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
+          // PERBAIKAN PENTING: Membersihkan spasi dan tag HTML untuk mencocokkan string kunci dan opsi secara presisi
+          const cleanStr = (s) => {
+              if(!s) return '';
+              return String(s).replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, '').trim();
+          };
 
           if (type === 'PGS' || type === 'PGK') { 
               const inputType = type === 'PGS' ? 'radio' : 'checkbox';
@@ -1504,14 +1518,22 @@ export default function Page() {
     };
 
     // =================================================================
-    // 10. INISIALISASI AUTO-LOGIN (MENUNGGU LIBRARY)
+    // 10. INISIALISASI AUTO-LOGIN & CACHE PATCH (MENUNGGU LIBRARY)
     // =================================================================
     initApp();
 
     const checkAutoLogin = () => {
-        // Tunggu sampai fungsi UI native siap
         if (!window.showLoad) {
             setTimeout(checkAutoLogin, 100);
+            return;
+        }
+        
+        // PERBAIKAN: PATCH V18 - Paksa Hapus Cache Lama untuk Mencegah Error Data
+        if(!localStorage.getItem('cbt_v18_patch_applied')) {
+            localStorage.clear();
+            sessionStorage.clear();
+            localStorage.setItem('cbt_v18_patch_applied', '1');
+            window.location.reload(true);
             return;
         }
 
@@ -1566,7 +1588,7 @@ export default function Page() {
           .hidden { display: none !important; }
           
           /* FIX Z-INDEX POPUP AGAR SELALU MUNCUL DI ATAS DASHBOARD */
-          .modal { z-index: 10505 !important; }
+          .modal { z-index: 10505 !important; position: fixed !important; }
           .modal-backdrop { z-index: 10500 !important; }
           .note-editor .modal { z-index: 10510 !important; }
           .swal2-container { z-index: 99999 !important; }
@@ -1673,6 +1695,7 @@ export default function Page() {
                     <li><a onclick="window.loadPage('hasil-rekap')" class="nav-link"><i class="fas fa-chart-bar me-2"></i>Hasil Nilai</a></li>
                     <li><a onclick="window.loadPage('guru-monitoring')" class="nav-link"><i class="fas fa-tv me-2"></i>Monitoring</a></li>
                     <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link text-info"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
+                    <li><a onclick="window.handleResetCache()" class="nav-link text-warning mt-3 border-top pt-3"><i class="fas fa-bolt me-2"></i>Reset Cache</a></li>
                 </ul>
                 <ul class="list-unstyled components hidden" id="menu-guru">
                     <li><a onclick="window.loadPage('admin-home')" class="nav-link active"><i class="fas fa-home me-2"></i>Dashboard</a></li>
@@ -1681,6 +1704,7 @@ export default function Page() {
                     <li><a onclick="window.loadPage('hasil-rekap')" class="nav-link"><i class="fas fa-poll me-2"></i>Hasil Nilai</a></li>
                     <li><a onclick="window.loadPage('guru-monitoring')" class="nav-link"><i class="fas fa-desktop me-2"></i>Live Monitor</a></li>
                     <li><a onclick="window.loadPage('admin-administrasi')" class="nav-link text-info"><i class="fas fa-print me-2"></i>Cetak Administrasi</a></li>
+                    <li><a onclick="window.handleResetCache()" class="nav-link text-warning mt-3 border-top pt-3"><i class="fas fa-bolt me-2"></i>Reset Cache</a></li>
                 </ul>
                 <ul class="list-unstyled components hidden" id="menu-siswa">
                     <li><a onclick="window.loadPage('siswa-home')" class="nav-link active"><i class="fas fa-pencil-alt me-2"></i>Ujian Saya</a></li>
