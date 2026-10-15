@@ -282,7 +282,7 @@ export default function Page() {
           if (!a.getAttribute('data-page')) {
             const onclick = a.getAttribute('onclick');
             if (onclick) {
-              const m = onclick.match(/window\.loadPage\(['"]([^'"]+)['"]\)/);
+              const m = onclick.match(/window\.loadPage\(['"]([^'\"]+)['"]\)/);
               if (m && m[1]) a.dataset.page = m[1];
             }
           }
@@ -961,6 +961,98 @@ export default function Page() {
                   </div>
               </div>
           </div>
+
+          <script>
+          (function(){
+            // Safe implementations / patches for CRUD functions that may be truncated in the main file
+
+            function showToastOrSwal(type, text) {
+              if (window.Swal) {
+                window.Swal.fire(text, '', type);
+              } else {
+                window._showNativeToast(type, text);
+              }
+            }
+
+            window.delExam = window.delExam || function(id){
+              if(!id) return;
+              const doDelete = function(){
+                if(window.showLoad) window.showLoad(true);
+                window.google.script.run.withSuccessHandler(function(res){
+                  if(window.showLoad) window.showLoad(false);
+                  if(res && res.status === 'success') { showToastOrSwal('success','Jadwal dihapus'); window.loadPage && window.loadPage('admin-ujian'); }
+                  else { showToastOrSwal('error', res && res.msg ? res.msg : 'Gagal menghapus jadwal'); }
+                }).withFailureHandler(function(err){ if(window.showLoad) window.showLoad(false); showToastOrSwal('error', err.message || 'Koneksi Error'); }).adminDeleteExam(id);
+              };
+
+              if(window.Swal) {
+                window.Swal.fire({title:'Hapus Jadwal?', icon:'warning', showCancelButton:true}).then(r=>{ if(r.isConfirmed) doDelete(); });
+              } else {
+                if(confirm('Hapus Jadwal?')) doDelete();
+              }
+            };
+
+            window.delUser = window.delUser || function(id){
+              if(!id) return;
+              const doDelete = function(){
+                if(window.showLoad) window.showLoad(true);
+                window.google.script.run.withSuccessHandler(function(res){
+                  if(window.showLoad) window.showLoad(false);
+                  if(res && res.status === 'success') { showToastOrSwal('success','User dihapus'); window.loadPage && window.loadPage('admin-users'); }
+                  else { showToastOrSwal('error', res && res.msg ? res.msg : 'Gagal menghapus user'); }
+                }).withFailureHandler(function(err){ if(window.showLoad) window.showLoad(false); showToastOrSwal('error', err.message || 'Koneksi Error'); }).adminManageUser('delete', id);
+              };
+
+              if(window.Swal) {
+                window.Swal.fire({title:'Hapus User?', icon:'warning', showCancelButton:true, confirmButtonColor: '#d33'}).then(r=>{ if(r.isConfirmed) doDelete(); });
+              } else {
+                if(confirm('Hapus User?')) doDelete();
+              }
+            };
+
+            window.deleteResult = window.deleteResult || function(rid) {
+              if(!rid) return;
+              const doDelete = function(){
+                if(window.showLoad) window.showLoad(true);
+                window.google.script.run.withSuccessHandler(function(res){
+                  if(window.showLoad) window.showLoad(false);
+                  if(res && res.status === 'success') { showToastOrSwal('success','Hasil direset'); window.loadPage && window.loadPage('hasil-rekap'); }
+                  else { showToastOrSwal('error', res && res.msg ? res.msg : 'Gagal mereset hasil'); }
+                }).withFailureHandler(function(err){ if(window.showLoad) window.showLoad(false); showToastOrSwal('error', err.message || 'Koneksi Error'); }).adminDeleteResult(rid);
+              };
+
+              if(window.Swal) {
+                window.Swal.fire({title:'Hapus & Reset Ujian?', text:'Data dihapus, cache/status ujian direset, dan siswa bisa ujian kembali.', icon:'warning', showCancelButton:true}).then(r=>{ if(r.isConfirmed) doDelete(); });
+              } else {
+                if(confirm('Hapus & Reset Ujian?')) doDelete();
+              }
+            };
+
+            window.applyKatrolMassal = window.applyKatrolMassal || function(){
+              const katrolInput = document.getElementById('katrol-value');
+              const addVal = katrolInput ? parseFloat(katrolInput.value) || 0 : 0;
+              if(addVal === 0) { showToastOrSwal('warning','Masukkan nilai katrol yang valid.'); return; }
+              if(!window.currentFilteredData || window.currentFilteredData.length === 0) { showToastOrSwal('info','Tidak ada data di tabel untuk dikatrol.'); return; }
+
+              const doApply = function(){
+                if(window.showLoad) window.showLoad(true);
+                const rids = window.currentFilteredData.map(d => d.ResultID);
+                window.google.script.run.withSuccessHandler(function(res){
+                  if(window.showLoad) window.showLoad(false);
+                  if(res && res.status === 'success') { showToastOrSwal('success', res.msg || 'Katrol berhasil'); window.loadPage && window.loadPage('hasil-rekap'); }
+                  else { showToastOrSwal('error', res && res.msg ? res.msg : 'Gagal katrol massal'); }
+                }).withFailureHandler(function(err){ if(window.showLoad) window.showLoad(false); showToastOrSwal('error', err.message || 'Koneksi Error'); }).adminKatrolMassal(rids, addVal);
+              };
+
+              if(window.Swal) {
+                window.Swal.fire({ title: 'Konfirmasi Katrol Nilai', text: `Anda yakin menambahkan nilai sebesar ${addVal} ke ${window.currentFilteredData.length} siswa di tabel ini?`, icon: 'warning', showCancelButton: true }).then(result=>{ if(result.isConfirmed) doApply(); });
+              } else {
+                if(confirm(`Anda yakin menambahkan nilai sebesar ${addVal} ke ${window.currentFilteredData.length} siswa?`)) doApply();
+              }
+            };
+
+          })();
+          </script>
         ` }} />
       </>
     );
