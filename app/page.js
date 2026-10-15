@@ -390,7 +390,509 @@ export default function Page() {
               if(area) area.innerHTML = `<div class="alert alert-danger">Error memproses data: ${err.message}.</div>`;
           }
       };
+// =================================================================
+      // FUNGSI RENDER MENU: USERS, REKAP, ADMINISTRASI & MONITORING
+      // =================================================================
 
+      window.generateUserExcelTemplate = function() {
+          const ws_data = [
+              ["Nama", "Username", "Password", "Role", "Sekolah", "Kelas"],
+              ["Siswa Teladan", "siswa01", "12345", "Siswa", "SMA Negeri 1", "10A"],
+              ["Guru Budi", "guru01", "guru123", "Guru", "SMA Negeri 1", "10A,10B"]
+          ];
+          const ws = window.XLSX.utils.aoa_to_sheet(ws_data);
+          const wb = window.XLSX.utils.book_new();
+          window.XLSX.utils.book_append_sheet(wb, ws, "TemplateUser");
+          window.XLSX.writeFile(wb, "Template_Upload_User.xlsx");
+      };
+
+      window.handleUploadUsersExcel = function(e) {
+          const file = e.target.files[0];
+          if(!file) return;
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+              const data = evt.target.result;
+              const workbook = window.XLSX.read(data, {type: 'binary'});
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
+              const json = window.XLSX.utils.sheet_to_json(worksheet);
+              
+              let formattedData = json.map(row => ({
+                  nama: row['Nama'] || '',
+                  username: row['Username'] || '',
+                  password: String(row['Password'] || ''),
+                  role: row['Role'] || 'Siswa',
+                  sekolah: row['Sekolah'] || '-',
+                  kelas: String(row['Kelas'] || '-')
+              })).filter(u => u.nama && u.username);
+              
+              if(formattedData.length === 0) return window.Swal.fire('Error', 'Data kosong atau format salah.', 'error');
+              
+              window.showLoad(true);
+              // Panggil endpoint adminBulkSaveUsers (pastikan route.js Anda punya action ini, atau simpan satu persatu)
+              window.google.script.run.withSuccessHandler(res => {
+                  window.showLoad(false);
+                  if(res.status === 'success') {
+                      window.Swal.fire('Sukses', res.msg, 'success');
+                      window.loadPage('admin-users');
+                  } else window.Swal.fire('Gagal', res.msg, 'error');
+              }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBatchSaveUsers(formattedData);
+          };
+          reader.readAsBinaryString(file);
+      };
+
+      window.toggleAllCb = function(type) {
+          const isChecked = $('#cb-all-'+type).is(':checked');
+          $('.cb-'+type).prop('checked', isChecked);
+          window.checkBulkDelete(type);
+      };
+
+      window.checkBulkDelete = function(type) {
+          const count = $('.cb-'+type+':checked').length;
+          if(count > 0) $('#btn-bulk-del-'+type).removeClass('hidden');
+          else $('#btn-bulk-del-'+type).addClass('hidden');
+      };
+
+      window.bulkDeleteUsers = function() {
+          const ids = [];
+          $('.cb-user:checked').each(function(){ ids.push($(this).val()); });
+          if(ids.length === 0) return;
+          window.Swal.fire({title:'Hapus '+ids.length+' User?', text: "Data tidak bisa dikembalikan", icon: 'warning', showCancelButton:true, confirmButtonColor: '#d33'}).then(r=>{
+              if(r.isConfirmed){
+                  window.showLoad(true);
+                  window.google.script.run.withSuccessHandler(res=>{
+                      window.showLoad(false); 
+                      if(res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('admin-users'); }
+                      else { window.Swal.fire('Gagal', res.msg, 'error'); }
+                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBulkDeleteUsers(ids);
+              }
+          });
+      };
+
+      window.bulkDeleteRekap = function() {
+          const rids = [];
+          $('.cb-rekap:checked').each(function(){ rids.push($(this).val()); });
+          if(rids.length === 0) return;
+          window.Swal.fire({title:'Hapus '+rids.length+' Hasil Ujian?', text: "Siswa yang dihapus hasilnya akan bisa mengikuti ujian kembali.", icon: 'warning', showCancelButton:true, confirmButtonColor: '#d33'}).then(r=>{
+              if(r.isConfirmed){
+                  window.showLoad(true);
+                  window.google.script.run.withSuccessHandler(res=>{
+                      window.showLoad(false); 
+                      if(res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); }
+                      else { window.Swal.fire('Gagal', res.msg, 'error'); }
+                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminBulkDeleteResult(rids);
+              }
+          });
+      };
+
+      window.exportToExcel = function(tableId, filename) {
+          const table = document.getElementById(tableId);
+          const wb = window.XLSX.utils.table_to_book(table, {sheet: "Rekap Nilai"});
+          window.XLSX.writeFile(wb, filename + '.xlsx');
+      };
+
+      // FUNGSI RENDER USERS
+      window.renderUsers = function(users) {
+          const cleanRole = String(window.user.Role).trim().toLowerCase();
+          const isAdmin = cleanRole === 'admin';
+          let h = `<div class="d-flex justify-content-between mb-3 flex-wrap gap-2">
+              <div>
+                  ${isAdmin ? `<button class="btn btn-success shadow-sm me-2" onclick="window.openModal('modalUser');document.getElementById('frm-user').reset();document.getElementById('mu-id').value='';">+ Tambah User</button>
+                  <button class="btn btn-outline-info shadow-sm me-2" onclick="window.generateUserExcelTemplate()"><i class="fas fa-download"></i> Template Excel</button>
+                  <label class="btn btn-primary shadow-sm m-0 me-2"><i class="fas fa-upload"></i> Upload Excel <input type="file" hidden accept=".xlsx,.xls" onchange="window.handleUploadUsersExcel(event)"></label>
+                  <button id="btn-bulk-del-users" class="btn btn-danger hidden shadow-sm me-2" onclick="window.bulkDeleteUsers()"><i class="fas fa-trash"></i> Hapus Terpilih</button>
+                  ` 
+                  : `<h5 class="fw-bold text-primary mb-0"><i class="fas fa-users me-2"></i>Data Siswa Kelas Anda</h5>`}
+              </div>
+              <input type="text" id="user-search" class="form-control" style="width:250px" placeholder="Cari Siswa..." onkeyup="window.filterTable('tbl-users', this.value)">
+          </div>
+          <div class="card border-0 shadow-sm"><div class="card-body p-0"><div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="tbl-users"><thead class="table-light">
+          <tr>
+              ${isAdmin ? `<th width="5%"><input type="checkbox" id="cb-all-users" class="form-check-input" onchange="window.toggleAllCb('users')"></th>` : ''}
+              <th>Nama</th><th>Username</th><th>Role</th><th>Kelas</th>${isAdmin ? '<th>Aksi</th>' : ''}
+          </tr></thead><tbody>`;
+          
+          users.forEach(u => {
+              const safeData = encodeURIComponent(JSON.stringify(u));
+              h += `<tr>
+              ${isAdmin ? `<td><input type="checkbox" class="cb-user form-check-input" value="${u.ID}" onchange="window.checkBulkDelete('users')"></td>` : ''}
+              <td class="fw-bold">${u.Nama}</td><td>${u.Username}</td>
+              <td><span class="badge bg-${String(u.Role).trim().toLowerCase()==='admin'?'danger':(String(u.Role).trim().toLowerCase()==='guru'?'warning':'primary')}">${u.Role}</span></td>
+              <td>${u.Kelas || '-'}</td>
+              ${isAdmin ? `<td><button class="btn btn-sm btn-outline-dark me-1" onclick="window.openUserModal('${safeData}')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger" onclick="window.delUser('${u.ID}')"><i class="fas fa-trash"></i></button></td>` : ''}</tr>`;
+          });
+          h += `</tbody></table></div></div></div>`;
+          document.getElementById('content-area').innerHTML = h;
+      };
+
+      // FUNGSI RENDER REKAP
+      window.renderRecapTable = function() {
+          const uniqueKelas = [...new Set(window.recapAllData.map(item => item.KelasSiswa))].filter(k => k).sort();
+          const uniqueUjian = [...new Set(window.recapAllData.map(item => item.JudulUjian))].sort();
+          let h = `
+          <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="fw-bold mb-0 text-primary"><i class="fas fa-chart-bar me-2"></i>Rekapitulasi Nilai</h5>
+              <div>
+                  <button id="btn-bulk-del-rekap" class="btn btn-danger hidden shadow-sm me-2" onclick="window.bulkDeleteRekap()"><i class="fas fa-trash"></i> Hapus Terpilih</button>
+                  <button class="btn btn-warning shadow-sm me-2" onclick="window.openKatrolModal()"><i class="fas fa-sort-amount-up me-1"></i> Katrol Nilai</button>
+                  <button class="btn btn-success shadow-sm me-2" onclick="window.exportToExcel('tbl-rekap', 'Rekap_Nilai')"><i class="fas fa-file-excel me-1"></i> Export Excel</button>
+                  <button class="btn btn-info shadow-sm text-white" onclick="window.printFilteredRecap()"><i class="fas fa-print me-1"></i> Cetak Rekap</button>
+              </div>
+          </div>
+          <div class="row g-2 mb-3">
+              <div class="col-md-4"><select id="filter-ujian" class="form-select" onchange="window.applyFilter()"><option value="">Semua Ujian</option>${uniqueUjian.map(u => `<option value="${u}">${u}</option>`).join('')}</select></div>
+              <div class="col-md-4"><select id="filter-kelas" class="form-select" onchange="window.applyFilter()"><option value="">Semua Kelas</option>${uniqueKelas.map(k => `<option value="${k}">${k}</option>`).join('')}</select></div>
+              <div class="col-md-4"><input type="text" id="filter-search" class="form-control" placeholder="Cari Nama Siswa..." onkeyup="window.applyFilter()"></div>
+          </div>
+          <div class="card border-0 shadow-sm"><div class="card-body p-0"><div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="tbl-rekap"><thead class="table-light">
+          <tr>
+              <th width="5%"><input type="checkbox" id="cb-all-rekap" class="form-check-input" onchange="window.toggleAllCb('rekap')"></th>
+              <th>Waktu</th><th>Nama Siswa</th><th>Kelas</th><th>Mata Pelajaran</th><th>Nilai Akhir</th><th>Aksi</th>
+          </tr></thead><tbody id="tbl-rekap-body"></tbody></table></div></div></div>`;
+          
+          document.getElementById('content-area').innerHTML = h; 
+          window.applyFilter();
+      };
+
+      window.applyFilter = function() {
+        const fUjian = document.getElementById('filter-ujian').value; 
+        const fKelas = document.getElementById('filter-kelas').value; 
+        const fSearch = document.getElementById('filter-search').value.toLowerCase();
+        
+        const tbody = document.getElementById('tbl-rekap-body'); 
+        tbody.innerHTML = ''; 
+        window.recapDataStore = {};
+        
+        const filtered = window.recapAllData.filter(item => { 
+            if(fUjian && item.JudulUjian !== fUjian) return false; 
+            if(fKelas && item.KelasSiswa !== fKelas) return false; 
+            if(fSearch && !item.NamaSiswa.toLowerCase().includes(fSearch)) return false; 
+            return true; 
+        });
+        window.currentFilteredData = filtered;
+        
+        document.getElementById('cb-all-rekap').checked = false;
+        document.getElementById('btn-bulk-del-rekap').classList.add('hidden');
+
+        if(filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center p-3">Tidak ada data ditemukan.</td></tr>'; return; }
+        
+        filtered.forEach(r => {
+          window.recapDataStore[r.ResultID] = { detail: r.Detail, nama: r.NamaSiswa, ujian: r.JudulUjian, nilai: r.TotalNilai, pembuat: r.PembuatNama };
+          tbody.insertAdjacentHTML('beforeend', `<tr>
+          <td><input type="checkbox" class="cb-rekap form-check-input" value="${r.ResultID}" onchange="window.checkBulkDelete('rekap')"></td>
+          <td class="small text-muted">${r.WaktuSubmit}</td><td><div class="fw-bold">${r.NamaSiswa}</div></td><td>${r.KelasSiswa}</td><td>${r.Mapel} <br><small class="text-muted">${r.JudulUjian}</small></td><td><span class="badge bg-primary fs-6">${r.TotalNilai}</span></td><td>
+          <button class="btn btn-sm btn-outline-info me-1" onclick="window.openKoreksi('${r.ResultID}')" title="Koreksi"><i class="fas fa-edit"></i> Edit</button>
+          <button class="btn btn-sm btn-outline-success me-1" onclick="window.printRecap('${r.ResultID}')" title="Cetak"><i class="fas fa-print"></i></button>
+          <button class="btn btn-sm btn-outline-danger" onclick="window.deleteResult('${r.ResultID}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`);
+        });
+      };
+
+      // FUNGSI CETAK REKAP & KARTU
+      window.printFilteredRecap = function() {
+        if(!window.currentFilteredData || window.currentFilteredData.length === 0) { window.Swal.fire('Data Kosong', 'Tidak ada data nilai yang tampil untuk dicetak.', 'info'); return; }
+        const fUjian = document.getElementById('filter-ujian').value || 'Semua Ujian'; const fKelas = document.getElementById('filter-kelas').value || 'Semua Kelas';
+        let namaPengawas = window.currentFilteredData.length > 0 ? window.currentFilteredData[0].PembuatNama : window.user.Nama;
+        
+        let html = `<html><head><title>Cetak Rekap Nilai</title><style>body { font-family: 'Times New Roman', Times, serif; padding: 30px;} h2, h4 { text-align: center; margin: 5px 0; } table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px;} th, td { border: 1px solid black; padding: 8px; text-align: left; } th { background-color: #f2f2f2; text-align: center;font-weight: bold; } .text-center { text-align: center; } .signature { margin-top: 50px; width: 100%; text-align: right;} .signature div { display: inline-block; text-align: center; width: 250px; } @media print { .no-print { display: none; } }</style></head><body><div class="no-print" style="margin-bottom: 15px; text-align:right;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; cursor:pointer; background:#198754; color:white; border:none; border-radius:5px;">Cetak Rekap</button></div><h4><div id="logo-container"><img src="${window.user.LogoUrl || 'https://via.placeholder.com/100'}" class="mb-3 rounded" width="100" alt="Logo"></div></h4><hr style="border:1px solid #000; margin-bottom: 20px;"><div><h2>REKAPITULASI HASIL UJIAN</h2><p><strong>Ujian / Materi :</strong> ${fUjian}</p><p><strong>Kelas :</strong> ${fKelas}</p><p><strong>Waktu Cetak :</strong> ${new Date().toLocaleString('id-ID')}</p></div><table><thead><tr><th width="5%">No</th><th width="15%">Waktu Submit</th><th width="25%">Nama Siswa</th><th width="10%">Kelas</th><th width="35%">Mata Pelajaran / Judul</th><th width="10%">Nilai Akhir</th></tr></thead><tbody>`;
+        window.currentFilteredData.forEach((r, i) => { html += `<tr><td class="text-center">${i + 1}</td><td class="text-center">${r.WaktuSubmit}</td><td>${r.NamaSiswa}</td><td class="text-center">${r.KelasSiswa}</td><td>${r.Mapel} - ${r.JudulUjian}</td><td class="text-center" style="font-weight: bold;">${r.TotalNilai}</td></tr>`; });
+        html += `</tbody></table><div class="signature"><div><p> ${new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p><p style="margin-bottom: 70px;">Guru Pengampu / Pengawas</p><p><strong>${namaPengawas}</strong></p></div></div><script>window.onload = function() { window.print();}<\/script></body></html>`;
+        const printWin = window.open('', '', 'width=900,height=700'); printWin.document.write(html); printWin.document.close();
+      };
+
+      window.printRecap = function(rid) {
+        const d = window.recapDataStore[rid]; if(!d) return;
+        let namaPengawas = d.pembuat || window.user.Nama;
+        
+        let detailArr = []; try { detailArr = JSON.parse(d.detail); } catch(e) {}
+        let detailHtml = '<table class="data-table"><thead><tr><th width="10%">No</th><th width="20%">Tipe Soal</th><th width="50%">Jawaban Siswa</th><th width="20%">Skor</th></tr></thead><tbody>';
+        detailArr.forEach(item => {
+          let n = item.i !== undefined ? item.i : item[0]; let s = item.s !== undefined ? item.s : item[1]; let t = item.t || 'Objektif'; let a = item.a !== undefined ? item.a : '';
+          let displayAns = Array.isArray(a) ? a.join(', ') : a; displayAns = displayAns ? String(displayAns).replace(/\n/g, '<br>') : '<i style="color:#999;">Tidak dijawab</i>';
+          detailHtml += `<tr><td style="text-align:center">${n}</td><td style="text-align:center">${t}</td><td>${displayAns}</td><td style="text-align:center">${s}</td></tr>`;
+        });
+        detailHtml += '</tbody></table>';
+
+        const printWindow = window.open('', '', 'width=800,height=600');
+        printWindow.document.write(`<html><head><title>Cetak Hasil - ${d.nama}</title><style>body{ font-family: 'Times New Roman', Times, serif; padding: 40px; color: #333; } .header { text-align: center; border-bottom: 3px solid #000; padding-bottom: 10px; margin-bottom: 20px; } .score-box { border: 2px solid #000; padding: 15px; text-align: center; margin-bottom: 20px; width: 200px; float: right; } .score { font-size: 38px; font-weight: bold; margin-top: 5px; } .data-table { width: 100%; border-collapse: collapse; margin-top: 15px; } .data-table th, .data-table td { border: 1px solid #000; padding: 8px; } .data-table th { background: #f0f0f0; text-align: center; } .clearfix::after { content: ""; clear: both; display: table; } .footer { margin-top: 50px; text-align: right; } .footer div { display: inline-block; text-align: center; width: 250px; } @media print { .no-print { display: none; } }</style></head><body><div class="no-print" style="text-align: right; margin-bottom: 20px;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; cursor:pointer; background:#1e3a8a; color:white; border:none; border-radius:5px;">Cetak Dokumen</button></div><div class="header"><h2>HASIL UJIAN BERBASIS KOMPUTER</h2></div><div class="clearfix"><div class="score-box"><h3>NILAI AKHIR</h3><div class="score">${d.nilai}</div></div><table class="student-info"><tr><td width="150"><strong>Nama Peserta</strong></td><td width="10">:</td><td>${d.nama}</td></tr><tr><td><strong>Mata Pelajaran</strong></td><td>:</td><td>${d.ujian}</td></tr><tr><td><strong>Waktu Cetak</strong></td><td>:</td><td>${new Date().toLocaleString('id-ID')}</td></tr></table></div><h4 style="margin-top:20px; border-bottom:1px solid #ccc; padding-bottom:5px;">Rincian Jawaban & Skor Tiap Soal</h4>${detailHtml}<div class="footer"><div><p> ${new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}</p><p style="margin-bottom: 70px;">Guru Pengampu / Pengawas</p><p><strong>${namaPengawas}</strong></p></div></div><script>window.onload = function() { window.print(); }<\/script></body></html>`);
+        printWindow.document.close();
+      };
+
+      // FUNGSI RENDER ADMINISTRASI
+      window.renderAdministrasi = function() {
+          const uniqueKelas = [...new Set(window.gAdminData.users.map(u => String(u.Kelas).trim()))].filter(k => k).sort();
+          let optKelas = `<option value="ALL">Semua Kelas</option>` + uniqueKelas.map(k => `<option value="${k}">${k}</option>`).join('');
+          let optUjian = `<option value="">-- Pilih Ujian --</option>` + window.gAdminData.exams.map(e => `<option value="${e.ExamID}">${e.Judul} (${e.Mapel})</option>`).join('');
+          
+          let h = `
+          <div class="row g-4">
+              <div class="col-md-4">
+                  <div class="card shadow-sm border-0 h-100">
+                      <div class="card-body">
+                          <h5 class="fw-bold text-primary"><i class="fas fa-id-card me-2"></i>Cetak Kartu Login</h5>
+                          <p class="small text-muted">Cetak kartu akun siswa untuk login aplikasi CBT.</p>
+                          <label class="small fw-bold">Filter Kelas</label>
+                          <select id="adm-kls-kartu" class="form-select mb-3">${optKelas}</select>
+                          <button class="btn btn-primary w-100" onclick="window.printKartuLogin()"><i class="fas fa-print me-1"></i> Cetak Kartu</button>
+                      </div>
+                  </div>
+              </div>
+              <div class="col-md-4">
+                  <div class="card shadow-sm border-0 h-100">
+                      <div class="card-body">
+                          <h5 class="fw-bold text-info"><i class="fas fa-clipboard-list me-2"></i>Cetak Daftar Hadir</h5>
+                          <p class="small text-muted">Format absensi siswa saat pelaksanaan ujian.</p>
+                          <label class="small fw-bold">Pilih Ujian</label>
+                          <select id="adm-exam-hadir" class="form-select mb-2">${optUjian}</select>
+                          <label class="small fw-bold">Filter Kelas</label>
+                          <select id="adm-kls-hadir" class="form-select mb-3">${optKelas}</select>
+                          <button class="btn btn-info text-white w-100" onclick="window.printDaftarHadir()"><i class="fas fa-print me-1"></i> Cetak Daftar Hadir</button>
+                      </div>
+                  </div>
+              </div>
+              <div class="col-md-4">
+                  <div class="card shadow-sm border-0 h-100">
+                      <div class="card-body">
+                          <h5 class="fw-bold text-success"><i class="fas fa-file-signature me-2"></i>Cetak Berita Acara</h5>
+                          <p class="small text-muted">Format laporan pelaksanaan ujian untuk pengawas.</p>
+                          <label class="small fw-bold">Pilih Ujian</label>
+                          <select id="adm-exam-ba" class="form-select mb-2">${optUjian}</select>
+                          <label class="small fw-bold">Filter Kelas</label>
+                          <select id="adm-kls-ba" class="form-select mb-3">${optKelas}</select>
+                          <button class="btn btn-success w-100" onclick="window.printBeritaAcara()"><i class="fas fa-print me-1"></i> Cetak Berita Acara</button>
+                      </div>
+                  </div>
+              </div>
+          </div>`;
+          document.getElementById('content-area').innerHTML = h;
+      };
+
+      window.printKartuLogin = function() {
+          const kls = document.getElementById('adm-kls-kartu').value;
+          let usersToPrint = window.gAdminData.users;
+          if (kls !== 'ALL') usersToPrint = usersToPrint.filter(u => u.Kelas === kls);
+          if (usersToPrint.length === 0) return window.Swal.fire('Kosong', 'Tidak ada data siswa untuk kelas tersebut.', 'info');
+          let html = `<html><head><title>Cetak Kartu Login</title><style>
+              body { font-family: 'Times New Roman', Times, serif; }
+              .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 15px; }
+              .card { border: 2px dashed #333; padding: 15px; border-radius: 8px; page-break-inside: avoid; }
+              .kop { display: flex; align-items: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
+              .kop img { width: 50px; height: 50px; margin-right: 15px; }
+              .kop h3 { margin: 0; font-size: 15px; text-transform: uppercase; }
+              .kop p { margin: 0; font-size: 11px; }
+              table { width: 100%; font-size: 14px; }
+              td { padding: 4px 0; }
+              @media print { .no-print { display: none; } }
+          </style></head><body>
+          <div class="no-print" style="margin: 15px; text-align:right;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; background:#1e3a8a; color:white; border:none; border-radius:5px; cursor:pointer;">Cetak Dokumen</button></div>
+          <div class="grid">`;
+          usersToPrint.forEach(u => {
+              html += `<div class="card">
+                  <div class="kop">
+                      <img src="${window.user.LogoUrl || 'https://via.placeholder.com/50'}" alt="Logo">
+                      <div><h3>KARTU LOGIN UJIAN CBT</h3></div>
+                  </div>
+                  <table>
+                      <tr><td width="30%"><strong>Nama</strong></td><td width="5%">:</td><td>${u.Nama}</td></tr>
+                      <tr><td><strong>Kelas</strong></td><td>:</td><td>${u.Kelas}</td></tr>
+                      <tr><td><strong>Username</strong></td><td>:</td><td><strong>${u.Username}</strong></td></tr>
+                      <tr><td><strong>Password</strong></td><td>:</td><td><strong>${u.Password}</strong></td></tr>
+                  </table>
+              </div>`;
+          });
+          html += `</div><script>window.onload = function() { window.print(); }<\/script></body></html>`;
+          const win = window.open('', '', 'width=800,height=600'); win.document.write(html); win.document.close();
+      };
+
+      window.printDaftarHadir = function() {
+          const examId = document.getElementById('adm-exam-hadir').value; 
+          const kls = document.getElementById('adm-kls-hadir').value;
+          if(!examId) return window.Swal.fire('Perhatian', 'Pilih Ujian terlebih dahulu.', 'warning');
+          const exam = window.gAdminData.exams.find(e => String(e.ExamID) === String(examId));
+          let usersToPrint = window.gAdminData.users;
+          if (kls !== 'ALL') usersToPrint = usersToPrint.filter(u => u.Kelas === kls);
+          if (usersToPrint.length === 0) return window.Swal.fire('Kosong', 'Tidak ada data siswa untuk kelas tersebut.', 'info');
+          let html = `<html><head><title>Daftar Hadir Ujian</title><style>
+              body { font-family: 'Times New Roman', Times, serif; padding: 30px; }
+              .kop { display: flex; align-items: center; justify-content: center; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 20px; text-align: center; }
+              .kop img { width: 70px; height: 70px; margin-right: 20px; position: absolute; left: 40px; }
+              .kop h2 { margin: 0; font-size: 20px; text-transform: uppercase; }
+              .kop p { margin: 5px 0 0; font-size: 14px; }
+              h3 { text-align: center; text-decoration: underline; margin-bottom: 20px; }
+              .info-table { width: 100%; margin-bottom: 20px; font-size: 14px; }
+              .info-table td { padding: 4px; }
+              .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+              .data-table th, .data-table td { border: 1px solid #000; padding: 8px; }
+              .data-table th { background: #f0f0f0; text-align: center; }
+              .ttd-box { height: 35px; }
+              @media print { .no-print { display: none; } }
+          </style></head><body>
+          <div class="no-print" style="margin-bottom: 15px; text-align:right;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; background:#0dcaf0; color:white; border:none; border-radius:5px; cursor:pointer;">Cetak Dokumen</button></div>
+          <div class="kop">
+              <img src="${window.user.LogoUrl || 'https://via.placeholder.com/70'}" alt="Logo">
+              <div><h2>DAFTAR HADIR PESERTA UJIAN</h2></div>
+          </div>
+          <h3>DAFTAR HADIR PESERTA</h3>
+          <table class="info-table">
+              <tr><td width="15%"><strong>Mata Pelajaran</strong></td><td width="2%">:</td><td width="33%">${exam.Mapel} - ${exam.Judul}</td><td width="15%"><strong>Hari, Tanggal</strong></td><td width="2%">:</td><td>......................................</td></tr>
+              <tr><td><strong>Kelas</strong></td><td>:</td><td>${kls === 'ALL' ? 'Semua Kelas' : kls}</td><td><strong>Waktu</strong></td><td>:</td><td>......................................</td></tr>
+          </table>
+          <table class="data-table">
+              <thead><tr><th width="5%">No</th><th width="15%">Username</th><th width="40%">Nama Peserta</th><th width="25%" colspan="2">Tanda Tangan</th><th width="15%">Ket</th></tr></thead>
+              <tbody>`;
+          usersToPrint.forEach((u, i) => {
+              let ttdCol1 = (i % 2 === 0) ? `${i+1}.` : '';
+              let ttdCol2 = (i % 2 !== 0) ? `${i+1}.` : '';
+              html += `<tr>
+                  <td style="text-align:center">${i + 1}</td>
+                  <td style="text-align:center">${u.Username}</td>
+                  <td>${u.Nama}</td>
+                  <td class="ttd-box">${ttdCol1}</td><td class="ttd-box">${ttdCol2}</td>
+                  <td></td>
+              </tr>`;
+          });
+          html += `</tbody></table>
+          <div style="margin-top: 50px; text-align: right; padding-right: 50px;">
+              <p>..................................</p>
+              <p style="margin-bottom: 70px;">Pengawas Ujian,</p>
+              <p><strong>( ......................................... )</strong></p>
+          </div>
+          <script>window.onload = function() { window.print(); }<\/script></body></html>`;
+          const win = window.open('', '', 'width=800,height=600'); win.document.write(html); win.document.close();
+      };
+
+      window.printBeritaAcara = function() {
+          const examId = document.getElementById('adm-exam-ba').value; 
+          const kls = document.getElementById('adm-kls-ba').value;
+          if(!examId) return window.Swal.fire('Perhatian', 'Pilih Ujian terlebih dahulu.', 'warning');
+          const exam = window.gAdminData.exams.find(e => String(e.ExamID) === String(examId));
+          
+          let html = `<html><head><title>Berita Acara Ujian</title><style>
+              body { font-family: 'Times New Roman', Times, serif; padding: 40px; line-height: 1.6; }
+              .kop { display: flex; align-items: center; justify-content: center; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 30px; text-align: center; }
+              .kop img { width: 80px; height: 80px; margin-right: 20px; position: absolute; left: 40px; }
+              .kop h2 { margin: 0; font-size: 22px; text-transform: uppercase; }
+              .kop p { margin: 5px 0 0; font-size: 14px; }
+              h3 { text-align: center; text-decoration: underline; margin-bottom: 30px; }
+              .content { font-size: 15px; text-align: justify; }
+              .content p { margin-bottom: 15px; }
+              .ttd-section { margin-top: 60px; width: 100%; }
+              .ttd-section table { width: 100%; text-align: center; }
+              @media print { .no-print { display: none; } }
+          </style></head><body>
+          <div class="no-print" style="margin-bottom: 15px; text-align:right;"><button onclick="window.print()" style="padding:10px 20px; font-size:16px; background:#198754; color:white; border:none; border-radius:5px; cursor:pointer;">Cetak Dokumen</button></div>
+          <div class="kop">
+              <img src="${window.user.LogoUrl || 'https://via.placeholder.com/80'}" alt="Logo">
+              <div><h2>PANITIA PELAKSANAAN UJIAN CBT</h2></div>
+          </div>
+          <h3>BERITA ACARA PELAKSANAAN UJIAN</h3>
+          <div class="content">
+              <p>Pada hari ini .................................. tanggal ........... bulan .............................. tahun .........................., telah diselenggarakan Ujian Berbasis Komputer (CBT) dengan rincian sebagai berikut:</p>
+              <table style="width: 100%; margin-left: 20px; margin-bottom: 15px;">
+                  <tr><td width="25%">Mata Pelajaran</td><td width="5%">:</td><td><strong>${exam.Mapel} - ${exam.Judul}</strong></td></tr>
+                  <tr><td>Kelas / Ruang</td><td>:</td><td><strong>${kls === 'ALL' ? 'Semua Kelas' : kls}</strong></td></tr>
+                  <tr><td>Waktu Pelaksanaan</td><td>:</td><td>Pukul ..................... s.d .....................</td></tr>
+              </table>
+              <p>Dengan jumlah peserta ujian sebagai berikut:</p>
+              <table style="width: 100%; margin-left: 20px; margin-bottom: 20px;">
+                  <tr><td width="25%">1. Jumlah Peserta Seharusnya</td><td width="5%">:</td><td>........... Orang</td></tr>
+                  <tr><td>2. Jumlah Peserta Hadir</td><td>:</td><td>........... Orang</td></tr>
+                  <tr><td>3. Jumlah Peserta Tidak Hadir</td><td>:</td><td>........... Orang</td></tr>
+                  <tr><td valign="top">4. Catatan Selama Ujian</td><td valign="top">:</td><td style="border-bottom: 1px dotted #000; height: 30px;"></td></tr>
+                  <tr><td></td><td></td><td style="border-bottom: 1px dotted #000; height: 30px;"></td></tr>
+              </table>
+              <p>Demikian Berita Acara ini dibuat dengan sesungguhnya untuk dapat dipergunakan sebagaimana mestinya.</p>
+          </div>
+          <div class="ttd-section">
+              <table>
+                  <tr>
+                      <td width="50%"></td>
+                      <td width="50%">....................................<br>Pengawas Ujian,</td>
+                  </tr>
+                  <tr><td height="80"></td><td></td></tr>
+                  <tr>
+                      <td></td>
+                      <td><strong>( .................................................. )</strong></td>
+                  </tr>
+              </table>
+          </div>
+          <script>window.onload = function() { window.print(); }<\/script></body></html>`;
+          const win = window.open('', '', 'width=800,height=600'); win.document.write(html); win.document.close();
+      };
+
+      // FUNGSI RENDER MONITORING
+      window.renderMonitoring = function(){ 
+          window.showLoad(true); 
+          window.google.script.run.withSuccessHandler(r=>{ 
+              window.showLoad(false); 
+              let h=`<div class="row g-2 mb-3"><div class="col-md-5"><select id="mon-sel" class="form-select" onchange="window.startMon()"><option value="">Pilih Ujian...</option>`; 
+              r.data.exams.forEach(e=>h+=`<option value="${e.ExamID}">${e.Judul}</option>`); 
+              h+=`</select></div>
+              <div class="col-md-4"><input type="text" id="mon-search" class="form-control" placeholder="Cari..." onkeyup="window.filterTable('tbl-mon', this.value)"></div>
+              <div class="col-md-3"><button class="btn btn-danger w-100 fw-bold" onclick="window.triggerResetMassal()"><i class="fas fa-recycle me-1"></i> Reset Semua Siswa</button></div>
+              </div><div id="mon-area" class="bg-white p-3 rounded shadow-sm" style="min-height:200px">Silakan pilih ujian untuk memonitor progres secara Live.</div>`; 
+              document.getElementById('content-area').innerHTML = h; 
+          }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas); 
+      };
+
+      window.startMon = function(){ 
+          const id = document.getElementById('mon-sel').value; 
+          if(id){ 
+              window.fetchMon(id); 
+              clearInterval(window.monitorInterval); 
+              window.monitorInterval = setInterval(()=>window.fetchMon(id), 10000); 
+          } else {
+              document.getElementById('mon-area').innerHTML = ''; 
+          }
+      };
+      
+      window.fetchMon = function(id){ 
+          window.google.script.run.withSuccessHandler(r=>{ 
+              if(r.status==='error') { document.getElementById('mon-area').innerHTML = `<div class="alert alert-warning">${r.msg}</div>`; return; } 
+              let h=`<table id="tbl-mon" class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama</th><th>Progress</th><th>Status</th><th>Aksi</th></tr></thead><tbody>`; 
+              r.data.forEach(d=>{ 
+                  const p=Math.round((d.terjawab/d.total)*100)||0; 
+                  h+=`<tr data-uid="${d.id}" data-nama="${d.nama}"><td><div class="fw-bold">${d.nama}</div><small class="text-muted">${d.kelas}</small></td><td><div class="progress" style="height:20px"><div class="progress-bar bg-success" style="width:${p}%">${d.terjawab}/${d.total}</div></div></td><td>${d.status==='Online'?'<span class="badge bg-success">ON</span>':'<span class="badge bg-secondary">OFF</span>'}</td><td><button class="btn btn-sm btn-outline-danger" onclick="window.triggerReset('${d.id}', '${d.nama}')">Reset User</button></td></tr>`; 
+              }); 
+              document.getElementById('mon-area').innerHTML = h+'</tbody></table>'; 
+              const cur = document.getElementById('mon-search').value; 
+              if(cur) window.filterTable('tbl-mon', cur); 
+          }).withFailureHandler(err => console.log(err)).getLiveMonitoring(id, window.user.Role, window.user.Kelas); 
+      };
+
+      window.triggerReset = function(sId, sName) { 
+          const eId = document.getElementById('mon-sel').value; 
+          if(!sId || !eId) return window.Swal.fire('Perhatian', 'Pilih ujian terlebih dahulu', 'warning'); 
+          window.Swal.fire({ title: 'Reset Siswa Ini?', text: `${sName} akan dikeluarkan dan harus login ulang.`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Ya, Reset!' }).then(r => { 
+              if(r.isConfirmed) { 
+                  window.Swal.fire({title: 'Memproses...', allowOutsideClick: false, didOpen: () => window.Swal.showLoading() }); 
+                  window.google.script.run.withSuccessHandler(res => { 
+                      if(res.status === 'success') { window.Swal.fire('Berhasil', res.msg, 'success'); window.fetchMon(eId); } else { window.Swal.fire('Gagal', res.msg, 'error'); } 
+                  }).withFailureHandler(err => window.Swal.fire('Error', err.message, 'error')).teacherResetStatus(sId, eId, window.user.Role, window.user.Kelas); 
+              } 
+          }); 
+      };
+
+      window.triggerResetMassal = function() {
+          const eId = document.getElementById('mon-sel').value; 
+          if(!eId) return window.Swal.fire('Perhatian', 'Pilih ujian terlebih dahulu dari dropdown', 'warning');
+          window.Swal.fire({
+              title: 'Reset Seluruh Siswa?',
+              text: 'Ini akan mengeluarkan semua siswa yang sedang mengerjakan ujian ini. Lanjutkan?',
+              icon: 'error',
+              showCancelButton: true,
+              confirmButtonColor: '#d33',
+              confirmButtonText: 'Ya, Reset Semua!'
+          }).then(r => {
+              if(r.isConfirmed) {
+                  window.Swal.fire({title: 'Memproses...', allowOutsideClick: false, didOpen: () => window.Swal.showLoading() });
+                  window.google.script.run.withSuccessHandler(res => {
+                      if(res.status === 'success') { window.Swal.fire('Berhasil', res.msg, 'success'); window.fetchMon(eId); } else { window.Swal.fire('Gagal', res.msg, 'error'); }
+                  }).withFailureHandler(err => window.Swal.fire('Error', err.message, 'error')).teacherResetMassal(eId, window.user.Role, window.user.Kelas);
+              }
+          });
+      };
       // =================================================================
       // 7. FUNGSI PENYIMPANAN DATA (TURSO) & MODAL DATA
       // =================================================================
