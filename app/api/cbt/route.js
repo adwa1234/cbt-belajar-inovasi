@@ -175,3 +175,45 @@ export async function POST(req) {
     return NextResponse.json({ status: "error", msg: error.message }, { status: 500 });
   }
 }
+// ==========================================
+    // TAMBAHAN: KELOLA HASIL / REKAP & UPLOAD EXCEL
+    // ==========================================
+    else if (action === "getRecapList") {
+        const [role, userId, userClass] = args;
+        const res = await turso.execute(`
+            SELECT r.*, u.Nama as nama, u.Kelas as kelas, e.Judul as ujian, e.Mapel as mapel 
+            FROM Results r 
+            JOIN Users u ON r.SiswaID = u.ID 
+            JOIN Exams e ON r.ExamID = e.ExamID
+            ORDER BY r.WaktuSubmit DESC
+        `);
+        return NextResponse.json({ status: "success", data: res.rows });
+    }
+    else if (action === "adminBatchSaveQuestions") {
+        const [eid, questions, uid] = args;
+        for (let d of questions) {
+            const qid = 'Q' + Date.now() + Math.random().toString(36).substring(2,6);
+            await turso.execute({
+                sql: "INSERT INTO Questions (QID, ExamID, Tipe, Pertanyaan, Options, KeyAnswer, Skor, Nomor, PembuatID) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                args: [qid, eid, d.type, d.text, JSON.stringify(d.options), JSON.stringify(d.key), d.score, d.num, uid]
+            });
+        }
+        return NextResponse.json({ status: "success", msg: "Batch Soal berhasil diunggah!" });
+    }
+    else if (action === "adminKatrolMassal") {
+        const [rids, addVal] = args;
+        for (const rid of rids) {
+            await turso.execute({ sql: "UPDATE Results SET TotalNilai = TotalNilai + ? WHERE ResultID = ?", args: [addVal, rid] });
+        }
+        return NextResponse.json({ status: "success", msg: "Katrol nilai massal berhasil diterapkan!" });
+    }
+    else if (action === "adminUpdateResult") {
+        const [rid, total, detail] = args;
+        await turso.execute({ sql: "UPDATE Results SET TotalNilai=?, Detail=? WHERE ResultID=?", args: [total, detail, rid] });
+        return NextResponse.json({ status: "success", msg: "Koreksi nilai berhasil disimpan!" });
+    }
+    else if (action === "adminDeleteResult") {
+        const [rid] = args;
+        await turso.execute({ sql: "DELETE FROM Results WHERE ResultID=?", args: [rid] });
+        return NextResponse.json({ status: "success", msg: "Data ujian siswa direset!" });
+    }
