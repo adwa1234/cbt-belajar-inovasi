@@ -160,18 +160,31 @@ export async function POST(req) {
     }
     
     // ==========================================
-    // 6. TAMBAHAN: KELOLA HASIL / REKAP & UPLOAD EXCEL
+    // 6. KELOLA HASIL / REKAP & UPLOAD EXCEL
     // ==========================================
     else if (action === "getRecapList") {
         const [role, userId, userClass] = args;
         const res = await turso.execute(`
-            SELECT r.*, u.Nama as nama, u.Kelas as kelas, e.Judul as ujian, e.Mapel as mapel 
+            SELECT r.*, u.Nama as nama, u.Kelas as kelas, e.Judul as ujian, e.Mapel as mapel, e.PembuatID as pembuat
             FROM Results r 
             JOIN Users u ON r.SiswaID = u.ID 
             JOIN Exams e ON r.ExamID = e.ExamID
             ORDER BY r.WaktuSubmit DESC
         `);
-        return NextResponse.json({ status: "success", data: res.rows });
+        
+        let finalData = res.rows;
+        const cleanRole = String(role).trim().toLowerCase();
+        
+        // Filter Jika yang login Guru, maka lihat hasil kelasnya saja
+        if (cleanRole === "guru") {
+            const kelasArr = String(userClass).split(',').map(k => k.trim().toLowerCase());
+            finalData = finalData.filter(r => 
+                (!r.pembuat || String(r.pembuat) === String(userId)) &&
+                kelasArr.includes(String(r.kelas).trim().toLowerCase())
+            );
+        }
+
+        return NextResponse.json({ status: "success", data: finalData });
     }
     else if (action === "adminBatchSaveQuestions") {
         const [eid, questions, uid] = args;
