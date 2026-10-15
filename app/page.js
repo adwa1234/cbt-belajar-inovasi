@@ -129,17 +129,15 @@ export default function Page() {
       };
 
       // PERBAIKAN: Manajemen Modal Diperbarui agar Form Berfungsi Normal
+      // PERBAIKAN: Memastikan popup (modal) muncul dengan benar dan tombol bisa diklik
       window.openModal = function(id) {
           const el = document.getElementById(id);
           if (!el) return;
           if (window.bootstrap) {
-              let m = window.bootstrap.Modal.getInstance(el);
-              if (!m) m = new window.bootstrap.Modal(el);
-              m.show();
+              window.bootstrap.Modal.getOrCreateInstance(el).show();
           } else if (window.jQuery) {
               window.jQuery(el).modal('show');
           }
-          
           setTimeout(() => {
               el.style.zIndex = '10505';
               document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '10500'; });
@@ -150,12 +148,11 @@ export default function Page() {
           const el = document.getElementById(id);
           if (!el) return;
           if (window.bootstrap) {
-              let m = window.bootstrap.Modal.getInstance(el);
-              if(m) m.hide();
+              const modalInstance = window.bootstrap.Modal.getInstance(el);
+              if(modalInstance) modalInstance.hide();
           } else if (window.jQuery) {
               window.jQuery(el).modal('hide');
           }
-          
           setTimeout(() => {
               document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
               document.body.classList.remove('modal-open');
