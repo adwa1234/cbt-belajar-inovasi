@@ -457,9 +457,7 @@ export default function Page() {
           if (role === 'guru') {
               let selectedKls = [];
               document.querySelectorAll('.kls-cb:checked').forEach(cb => selectedKls.push(cb.value));
-              if (selectedKls.length === 0) {
-                  window.Swal.fire('Perhatian', 'Pilih minimal 1 target kelas!', 'warning'); return;
-              }
+              if (selectedKls.length === 0) { window.Swal.fire('Error', 'Pilih minimal 1 target kelas!', 'error'); return; }
               targetKelas = selectedKls.join(', ');
           } else {
               const klsEl = document.getElementById('ex-kelas');
@@ -485,7 +483,7 @@ export default function Page() {
           };
 
           if (!d.judul || !d.mapel || !d.start || !d.end || !d.targetKelas) {
-              window.Swal.fire('Error', 'Lengkapi semua kolom data yang wajib!', 'error'); return;
+              window.Swal.fire('Error', 'Lengkapi data wajib!', 'error'); return;
           }
 
           const btn = document.querySelector('#frm-exam button[type="submit"]');
@@ -494,15 +492,13 @@ export default function Page() {
           btn.disabled = true;
 
           window.google.script.run.withSuccessHandler((res) => {
+              btn.innerHTML = origBtn; btn.disabled = false;
               if(res.status === 'success') {
                   window.closeModal('modalExam');
-                  // PERBAIKAN: Refresh dashboard langsung setelah menyimpan agar jadwal baru muncul
-                  window.Swal.fire('Sukses', 'Jadwal berhasil disimpan!', 'success').then(() => {
-                      window.showLoad(true);
-                      window.loadPage('admin-ujian');
-                  });
+                  // PERBAIKAN: Langsung arahkan ke refresh dashboard tanpa trigger loader tambahan
+                  window.toast('success', 'Jadwal berhasil disimpan!');
+                  window.loadPage('admin-ujian'); 
               } else { 
-                  btn.innerHTML = origBtn; btn.disabled = false;
                   window.Swal.fire('Gagal Menyimpan', res.msg, 'error'); 
               }
           }).withFailureHandler(err => { 
