@@ -203,44 +203,62 @@ export async function POST(req) {
         const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [eid] });
         let totalScore = 0; let maxScore = 0; let detailLog = [];
 
+        // PERBAIKAN: Fungsi pembersih string agar pencocokan jawaban 100% akurat 
+        // Mengabaikan sisa tag HTML, spasi, dan huruf besar/kecil
+        const cleanStr = (s) => {
+            if (s === null || s === undefined) return '';
+            return String(s).replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, '').trim().toLowerCase();
+        };
+
         qRes.rows.forEach(q => {
-            const userAns = ansArr.find(a => a.qid === q.QID);
+            const userAns = ansArr.find(a => String(a.qid) === String(q.QID));
             const ansVal = userAns ? userAns.answer : '';
-            const keyArr = JSON.parse(q.KeyAnswer || "[]");
+            
+            // Parsing KeyAnswer dengan aman
+            let rawKeys = q.KeyAnswer || q.Key || "[]";
+            let keyArr = [];
+            try { 
+                let parsed = JSON.parse(rawKeys);
+                keyArr = Array.isArray(parsed) ? parsed : [parsed];
+            } catch(e) { keyArr = []; }
+
             const skorItem = Number(q.Skor || 10);
             let earned = 0;
 
-            if (q.Tipe === 'PGS' && ansVal === keyArr[0]) earned = skorItem;
-            else if (q.Tipe === 'PGK' && Array.isArray(ansVal) && JSON.stringify(ansVal.sort()) === JSON.stringify(keyArr.sort())) earned = skorItem;
+            // Logika Penilaian
+            if (q.Tipe === 'PGS') {
+                if (cleanStr(ansVal) === cleanStr(keyArr[0])) earned = skorItem;
+            } 
+            else if (q.Tipe === 'PGK') {
+                if (Array.isArray(ansVal)) {
+                    const cleanAns = ansVal.map(cleanStr).sort();
+                    const cleanKey = keyArr.map(cleanStr).sort();
+                    if (JSON.stringify(cleanAns) === JSON.stringify(cleanKey)) earned = skorItem;
+                }
+            } 
             else if (q.Tipe === 'PGKK' || q.Tipe === 'Menjodohkan') {
                 let correctCount = 0;
-                keyArr.forEach((k, idx) => { if (ansVal && ansVal[idx] === k) correctCount++; });
+                keyArr.forEach((k, idx) => { 
+                    if (ansVal && Array.isArray(ansVal) && cleanStr(ansVal[idx]) === cleanStr(k)) {
+                        correctCount++;
+                    }
+                });
                 earned = keyArr.length > 0 ? (correctCount / keyArr.length) * skorItem : 0;
             }
 
             maxScore += skorItem;
             totalScore += earned;
-            detailLog.push({ i: q.Nomor, s: earned, m: skorItem, t: q.Tipe, a: ansVal });
+            detailLog.push({ i: q.Nomor, s: Number(earned.toFixed(2)), m: skorItem, t: q.Tipe, a: ansVal });
         });
 
-        const finalScore = maxScore > 0 ? ((totalScore / maxScore) * 100).toFixed(2) : 0;
-        const rid = 'RES' + Date.now();
-        await turso.execute({ sql: "INSERT INTO Results (ResultID, SiswaID, ExamID, TotalNilai, Detail, Pelanggaran) VALUES (?, ?, ?, ?, ?, ?)", args: [rid, uid, eid, finalScore, JSON.stringify(detailLog), violations > 0 ? `Pelanggaran: ${violations}x` : '-'] });
+        // Kalkulasi ke skala 100
+        const finalScore = maxScore > 0 ? Number(((totalScore / maxScore) * 100).toFixed(2)) : 0;
+        const rid = 'RES' + Date.now() + Math.floor(Math.random() * 1000);
+        
+        await turso.execute({ 
+            sql: "INSERT INTO Results (ResultID, SiswaID, ExamID, TotalNilai, Detail, Pelanggaran) VALUES (?, ?, ?, ?, ?, ?)", 
+            args: [rid, uid, eid, finalScore, JSON.stringify(detailLog), violations > 0 ? `Pelanggaran: ${violations}x` : '-'] 
+        });
         
         return NextResponse.json({ status: "success", msg: "Jawaban tersimpan", data: { score: finalScore } });
     }
-    else if (action === "autosaveAnswer" || action === "updateClientProgress") {
-        // Bisa diintegrasikan dengan Redis/Cache di masa depan. Untuk Turso kembalikan success.
-        return NextResponse.json({ status: "success" });
-    }
-    else if (action === "getLiveMonitoring") {
-        // Kembalikan format array kosong untuk sementara (butuh tabel terpisah untuk presensi live di SQL)
-        return NextResponse.json({ status: "success", data: [] });
-    }
-
-    return NextResponse.json({ status: "error", msg: "Aksi tidak dikenali" });
-
-  } catch (error) {
-    return NextResponse.json({ status: "error", msg: error.message }, { status: 500 });
-  }
-}
