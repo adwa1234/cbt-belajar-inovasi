@@ -295,7 +295,69 @@ export default function Page() {
               if(r.isConfirmed) executeLogout();
           });
       };
+// =================================================================
+      // 5.5 FUNGSI RENDER HALAMAN TAMBAHAN (MISSING FUNCTIONS FIX)
+      // =================================================================
+      window.renderUsers = function(users) {
+          const area = document.getElementById('content-area');
+          if(!area) return;
+          let h = `<div class="d-flex justify-content-between mb-3"><button class="btn btn-primary shadow-sm" onclick="window.openUserModal()">+ Tambah User Baru</button></div>`;
+          h += `<div class="table-responsive bg-white rounded shadow-sm p-3"><table class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama Lengkap</th><th>Username</th><th>Role</th><th>Kelas</th><th>Aksi</th></tr></thead><tbody>`;
+          users.forEach(u => {
+              const safeU = encodeURIComponent(JSON.stringify(u));
+              h += `<tr><td class="fw-bold">${u.Nama}</td><td>${u.Username}</td><td><span class="badge bg-secondary">${u.Role}</span></td><td>${u.Kelas||'-'}</td>
+              <td><button class="btn btn-sm btn-outline-primary me-1" onclick="window.openUserModal('${safeU}')"><i class="fas fa-edit"></i> Edit</button> 
+              <button class="btn btn-sm btn-danger" onclick="window.delUser('${u.ID}')"><i class="fas fa-trash"></i></button></td></tr>`;
+          });
+          h += `</tbody></table></div>`;
+          area.innerHTML = h;
+      };
 
+      window.renderRecapTable = function() {
+          const area = document.getElementById('content-area');
+          if(!area) return;
+          window.recapDataStore = {};
+          window.currentFilteredData = window.recapAllData;
+          let h = `<div class="d-flex justify-content-between mb-3"><button class="btn btn-warning fw-bold shadow-sm" onclick="window.openKatrolModal()"><i class="fas fa-level-up-alt me-1"></i> Katrol Massal</button></div>`;
+          h += `<div class="table-responsive bg-white rounded shadow-sm p-3"><table class="table table-hover align-middle"><thead><tr class="table-light"><th>Nama Siswa</th><th>Ujian</th><th>Nilai Akhir</th><th>Waktu Submit</th><th>Aksi</th></tr></thead><tbody>`;
+          
+          if(window.recapAllData.length === 0) {
+              h += `<tr><td colspan="5" class="text-center py-4 text-muted">Belum ada data nilai masuk.</td></tr>`;
+          } else {
+              window.recapAllData.forEach(r => {
+                  window.recapDataStore[r.ResultID] = { nama: r.nama, ujian: r.ujian, nilai: r.TotalNilai, detail: r.Detail };
+                  h += `<tr><td class="fw-bold">${r.nama} <br><small class="text-muted">Kelas: ${r.kelas}</small></td><td>${r.ujian} <br><small class="badge bg-light text-dark border">${r.mapel}</small></td>
+                  <td><span class="badge bg-success fs-6">${r.TotalNilai}</span></td><td>${r.WaktuSubmit}</td>
+                  <td><button class="btn btn-sm btn-info text-white me-1" onclick="window.openKoreksi('${r.ResultID}')"><i class="fas fa-check-double"></i> Koreksi</button> 
+                  <button class="btn btn-sm btn-danger" onclick="window.deleteResult('${r.ResultID}')"><i class="fas fa-undo"></i> Reset</button></td></tr>`;
+              });
+          }
+          h += `</tbody></table></div>`;
+          area.innerHTML = h;
+      };
+
+      window.renderMonitoring = function() {
+          const area = document.getElementById('content-area');
+          if(area) area.innerHTML = `<div class="alert alert-info border-0 shadow-sm"><i class="fas fa-info-circle me-2"></i>Fitur Live Monitoring sedang dalam tahap pengembangan dan sinkronisasi realtime.</div>`;
+      };
+
+      window.renderAdministrasi = function() {
+          const area = document.getElementById('content-area');
+          if(area) area.innerHTML = `<div class="alert alert-info border-0 shadow-sm"><i class="fas fa-info-circle me-2"></i>Fitur Cetak Administrasi (Berita Acara, Daftar Hadir) sedang dalam persiapan layout PDF.</div>`;
+      };
+
+      window.filterAdminUjian = function() {
+          const mapel = document.getElementById('filter-mapel-ujian').value.toLowerCase();
+          const kelas = document.getElementById('filter-kelas-ujian').value.toLowerCase();
+          document.querySelectorAll('.ujian-card').forEach(card => {
+              const cMapel = (card.getAttribute('data-mapel') || '').toLowerCase();
+              const cKelas = (card.getAttribute('data-kelas') || '').toLowerCase();
+              const matchMapel = mapel === "" || cMapel === mapel;
+              const matchKelas = kelas === "" || cKelas.includes(kelas);
+              if (matchMapel && matchKelas) card.parentElement.style.display = 'block';
+              else card.parentElement.style.display = 'none';
+          });
+      };
       // =================================================================
       // 6. RENDER KONTEN (PENGGANTIAN DIV NATIVE)
       // =================================================================
