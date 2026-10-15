@@ -388,6 +388,134 @@ export default function Page() {
               if(r.isConfirmed) executeLogout();
           });
       };
+      // =================================================================
+      // FUNGSI JADWAL UJIAN: TAMBAH, EDIT, DAN HAPUS
+      // =================================================================
+      window.openExamModal = function(str) {
+          const form = document.getElementById('frm-exam');
+          if(form) form.reset();
+          
+          document.getElementById('ex-id').value = '';
+          let d = null;
+          if(str) {
+              try {
+                  d = JSON.parse(decodeURIComponent(str));
+                  document.getElementById('ex-id').value = d.ExamID || '';
+                  document.getElementById('ex-judul').value = d.Judul || '';
+                  document.getElementById('ex-mapel').value = d.Mapel || '';
+                  document.getElementById('ex-durasi').value = d.Durasi || '';
+                  document.getElementById('ex-limit').value = d.LimitTries || d.Limit || 1;
+                  document.getElementById('ex-start').value = d.StartDate ? d.StartDate.replace(' ','T') : '';
+                  document.getElementById('ex-end').value = d.EndDate ? d.EndDate.replace(' ','T') : '';
+                  document.getElementById('ex-token').value = d.Token || '';
+                  document.getElementById('ex-randomQ').checked = d.RandomQ === 'Yes';
+                  document.getElementById('ex-showStats').checked = d.ShowStats === 'Yes';
+                  document.getElementById('ex-violations').value = d.MaxViolations || 3;
+              } catch(e) { console.error("Parse Error:", e); }
+          } else {
+              document.getElementById('ex-violations').value = 3;
+              document.getElementById('ex-limit').value = 1;
+          }
+
+          const role = String(window.user.Role).trim().toLowerCase();
+          const container = document.getElementById('kelas-container');
+
+          if (role === 'guru') {
+              const kelasArr = String(window.user.Kelas).split(',').map(k => k.trim()).filter(k => k);
+              let selectedKelas = d && d.TargetKelas ? String(d.TargetKelas).split(',').map(k => k.trim()) : kelasArr;
+              let htmlKelas = `<div class="d-flex flex-wrap gap-2 mt-2">`;
+              kelasArr.forEach(k => {
+                  const isChecked = selectedKelas.includes(k) ? 'checked' : '';
+                  htmlKelas += `<div class="form-check"><input class="form-check-input kls-cb" type="checkbox" value="${k}" id="cb-${k}" ${isChecked}><label class="form-check-label small" for="cb-${k}">${k}</label></div>`;
+              });
+              htmlKelas += `</div>`;
+              container.innerHTML = htmlKelas;
+          } else {
+              let valKelas = d && d.TargetKelas ? d.TargetKelas : '';
+              // PERBAIKAN: Input tidak boleh tersembunyi/hilang saat reset
+              container.innerHTML = `<input type="text" id="ex-kelas" name="targetKelas" class="form-control" placeholder="Contoh: 7A, 7B" value="${valKelas}" required>`;
+          }
+          window.openModal('modalExam');
+      };
+
+      window.saveExam = function() {
+          let targetKelas = "";
+          const role = String(window.user.Role).trim().toLowerCase();
+          
+          if (role === 'guru') {
+              let selectedKls = [];
+              document.querySelectorAll('.kls-cb:checked').forEach(cb => selectedKls.push(cb.value));
+              if (selectedKls.length === 0) {
+                  window.Swal.fire('Error', 'Pilih minimal 1 target kelas!', 'error'); return;
+              }
+              targetKelas = selectedKls.join(', ');
+          } else {
+              const klsEl = document.getElementById('ex-kelas');
+              if(klsEl) targetKelas = klsEl.value;
+          }
+
+          const d = {
+              examId: document.getElementById('ex-id').value,
+              judul: document.getElementById('ex-judul').value,
+              mapel: document.getElementById('ex-mapel').value,
+              durasi: document.getElementById('ex-durasi').value,
+              start: document.getElementById('ex-start').value,
+              end: document.getElementById('ex-end').value,
+              limit: document.getElementById('ex-limit').value,
+              token: document.getElementById('ex-token').value,
+              maxViolations: document.getElementById('ex-violations').value,
+              showStats: document.getElementById('ex-showStats').checked ? 'Yes' : 'No',
+              randomQ: document.getElementById('ex-randomQ').checked ? 'Yes' : 'No',
+              targetKelas: targetKelas,
+              userRole: window.user.Role,
+              userClass: window.user.Kelas,
+              userId: window.user.ID
+          };
+
+          if (!d.judul || !d.mapel || !d.start || !d.end || !d.targetKelas) {
+              window.Swal.fire('Error', 'Lengkapi data wajib!', 'error'); return;
+          }
+
+          const btn = document.querySelector('#frm-exam button[type="submit"]');
+          const origBtn = btn.innerHTML;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+          btn.disabled = true;
+
+          window.google.script.run.withSuccessHandler((res) => {
+              if(res.status === 'success') {
+                  window.closeModal('modalExam');
+                  window.showLoad(true); // PERBAIKAN: Tampilkan loader saat refresh dashboard agar tidak glitch
+                  window.google.script.run.withSuccessHandler(res2 => {
+                      window.showLoad(false);
+                      btn.innerHTML = origBtn; btn.disabled = false;
+                      if (res2.status === 'success') { 
+                          window.gData = res2.data; window.renderContent('admin-ujian'); window.toast('success', 'Jadwal Disimpan!'); 
+                      } else { window.Swal.fire('Gagal', res2.msg, 'error'); }
+                  }).withFailureHandler(err => { 
+                      window.showLoad(false); btn.innerHTML = origBtn; btn.disabled = false; window.Swal.fire('Error', err.message, 'error'); 
+                  }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas);
+              } else { 
+                  btn.innerHTML = origBtn; btn.disabled = false;
+                  window.Swal.fire('Gagal', res.msg, 'error'); 
+              }
+          }).withFailureHandler(err => { btn.innerHTML = origBtn; btn.disabled = false; window.Swal.fire('Error', err.message, 'error'); }).adminSaveExam(d);
+      };
+
+      window.delExam = function(id) { 
+          window.Swal.fire({title:'Hapus Jadwal?', icon:'warning', showCancelButton:true, confirmButtonColor: '#d33'}).then(r=>{
+              if(r.isConfirmed) { 
+                  window.showLoad(true); 
+                  window.google.script.run.withSuccessHandler(()=>{
+                      window.showLoad(false); 
+                      window.loadPage('admin-ujian');
+                      window.toast('success', 'Jadwal Dihapus!');
+                  }).withFailureHandler(err => { 
+                      window.showLoad(false); 
+                      window.Swal.fire('Error', err.message, 'error')
+                  }).adminDeleteExam(id, window.user.ID, window.user.Role); 
+              } 
+          });
+      };
 
       // =================================================================
       // 7. RENDER KONTEN DASHBOARD
