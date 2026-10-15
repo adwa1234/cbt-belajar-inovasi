@@ -1102,7 +1102,245 @@ export default function Page() {
       };
 
       window.deleteResult = function(rid) { window.Swal.fire({title:'Hapus & Reset Ujian?', text:'Data dihapus, cache/status ujian direset, dan siswa bisa ujian kembali.', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33'}).then(r=>{ if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(res=>{ window.showLoad(false); if(res.status==='success'){ window.Swal.fire('Berhasil',res.msg,'success'); window.loadPage('hasil-rekap'); } else window.Swal.fire('Gagal',res.msg,'error'); }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminDeleteResult(rid); } }); };
+// =================================================================
+      // FUNGSI UJIAN SISWA (START, RUN, SUBMIT, SECURITY)
+      // =================================================================
+      window.startExam = function(eid) {
+          try { if (screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); } } catch (e) {}
 
+          const rules = `<div class="text-start small">
+              <b>TATA CARA & ATURAN UJIAN:</b><br><br>
+              1. Ujian ini menggunakan <b>Layar Penuh (Fullscreen)</b>.<br>
+              2. Jangan keluar dari mode layar penuh selama ujian berlangsung.<br>
+              3. Jangan membuka aplikasi, tab baru, atau split layar.<br>
+              4. Sistem akan mendeteksi pelanggaran. Jika melanggar, jawaban akan <b>otomatis terkirim</b>.<br>
+          </div>`;
+          window.Swal.fire({ title: 'Peraturan Ujian', html: rules, icon: 'warning', showCancelButton: true, confirmButtonText: 'SETUJU & MULAI', confirmButtonColor: '#1e3a8a' }).then(r => {
+              if(r.isConfirmed) {
+                  if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch((err) => {}); }
+                  window.showLoad(true);
+                  window.google.script.run.withSuccessHandler(res => {
+                      window.showLoad(false);
+                      if(res.status === 'success') {
+                          localStorage.removeItem(`ANS_${window.user.ID}_${eid}`);
+                          window.activeExamId = eid; 
+                          window.totalQ = res.data.length;
+                          window.activeExamViolations = res.maxViolations || 3;
+                          document.getElementById('do-exam-title').innerHTML = `${res.judul} <span class="mx-2">|</span> ${window.user.Nama}`;
+                          try { localStorage.setItem('cbt_active_exam', JSON.stringify({ id: eid, qs: res.data, dur: res.duration, maxV: window.activeExamViolations, start: Date.now(), judul: res.judul, token: res.token })); } catch(e) {}
+                          window.violationCount = 0; 
+                          window.enableSecurity(); 
+                          window.runExam(res.data, res.duration, false);
+                      } else window.Swal.fire('Gagal', res.msg, 'error');
+                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getExamPack(eid, window.user.ID);
+              }
+          });
+      };
+
+      window.refreshUjianSiswa = function() {
+          window.Swal.fire({ title: 'Refresh Data Ujian?', text: 'Menyegarkan data soal tanpa menghilangkan jawaban.', icon: 'info', showCancelButton: true, confirmButtonText: 'Ya, Refresh' }).then(r => {
+              if (r.isConfirmed) {
+                  window.disableSecurity(); window.showLoad(true);
+                  window.google.script.run.withSuccessHandler(res => {
+                      window.showLoad(false);
+                      if(res.status === 'success') {
+                          window.totalQ = res.data.length; window.activeExamViolations = res.maxViolations || 3;
+                          window.enableSecurity(); window.runExam(res.data, res.duration, true);
+                          window.Swal.fire('Berhasil', 'Soal disinkronisasi.', 'success');
+                      } else { window.Swal.fire('Gagal', res.msg, 'error'); }
+                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getExamPack(window.activeExamId, window.user.ID);
+              }
+          });
+      };
+
+      window.enableSecurity = function() { 
+          window.violationCount = 0; window.isExamFinished = false; window.violationLock = false; 
+          document.addEventListener("visibilitychange", window.handleVisibilityChange); 
+          window.addEventListener("blur", window.handleWindowBlur); 
+          document.addEventListener("fullscreenchange", window.handleFullscreenChange);
+          $(document).on("contextmenu.exam", function(e) { e.preventDefault(); return false; }); 
+          $(document).on("keydown.exam", function(e) { if (e.key === "PrintScreen" || (e.ctrlKey && e.key === "p") || (e.key === "F12")) { e.preventDefault(); return false; } });
+      };
+
+      window.disableSecurity = function() { 
+          document.removeEventListener("visibilitychange", window.handleVisibilityChange); 
+          window.removeEventListener("blur", window.handleWindowBlur); 
+          document.removeEventListener("fullscreenchange", window.handleFullscreenChange); 
+          $(document).off(".exam"); 
+      };
+
+      window.handleVisibilityChange = function() { if (!window.isExamFinished && document.hidden) window.triggerViolation("Anda keluar dari tab ujian!"); };
+      window.handleWindowBlur = function() { if (!window.isExamFinished) window.triggerViolation("Anda meninggalkan halaman ujian!"); };
+      window.handleFullscreenChange = function() { if (!window.isExamFinished && !document.fullscreenElement) { window.triggerViolation("Anda keluar dari mode fullscreen!"); try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} } };
+
+      window.triggerViolation = function(msg) {
+          if(window.violationLock || window.isExamFinished) return;
+          window.violationLock = true; window.violationCount++; 
+          if (window.violationCount >= window.activeExamViolations) {
+              window.isExamFinished = true; window.submitExamButton(true); 
+          } else {
+              window.Swal.fire({ icon: 'warning', title: 'PERINGATAN PELANGGARAN!', text: `${msg} (${window.violationCount}/${window.activeExamViolations})`, confirmButtonText: 'KEMBALI KE UJIAN', allowOutsideClick: false
+              }).then(() => { window.violationLock = false; try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} });
+          }
+      };
+
+      window.runExam = function(qs, dur, isResume) {
+          document.getElementById('view-dashboard').classList.add('hidden'); 
+          document.getElementById('view-dashboard').style.display = 'none';
+          document.getElementById('view-exam').classList.remove('hidden'); 
+          document.getElementById('view-exam').style.display = 'flex';
+          document.body.classList.add('exam-mode');
+          
+          const c = $('#q-slides-container'); const g = $('#nav-grid'); c.empty(); g.empty();
+          qs.forEach((q,i) => {
+              let inp = '';
+              if(q.Tipe==='PGKK') {
+                  const opts = JSON.parse(q.Options||"[]");
+                  inp = `<table class="table table-bordered tbl-pgkk mt-3 bg-white"><thead><tr class="table-light"><th>PERNYATAAN</th><th width="15%">BENAR</th><th width="15%">SALAH</th></tr></thead><tbody>`;
+                  opts.forEach((o,x)=> inp+=`<tr><td><div class="opt-content">${o}</div></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="B" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="S" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td></tr>`);
+                  inp += `</tbody></table>`;
+              } else if(q.Tipe==='Menjodohkan') {
+                  const lItems = JSON.parse(q.Options||"[]"); const rItems = q.Extra || [];
+                  inp = `<div class="match-container" id="match-area-${i}"><input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})"><svg class="match-svg" id="svg-${i}"></svg><div class="match-col" id="col-l-${i}">${lItems.map((t,Idx)=>`<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div><div class="match-col" id="col-r-${i}">${rItems.map((t,Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="window.resetMatch(${i})">Reset Garis</button></div>`;
+              } else if(q.Tipe.includes('PG')) {
+                  const opts = JSON.parse(q.Options||"[]");
+                  opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
+              } else inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="window.saveAnsLocal('${q.QID}', 'ESSAY', ${i})"></textarea>`;
+              c.append(`<div class="q-slide hidden" id="sl-${i}" data-qid="${q.QID}" data-type="${q.Tipe}"><div class="badge bg-primary mb-3">Soal No. ${q.Nomor||i+1}</div><div class="mb-4 q-content lead">${q.Pertanyaan}</div>${inp}</div>`);
+              g.append(`<button id="nb-${i}" class="q-nav-btn ${i===0?'active-q':''}" onclick="window.jump(${i})">${i+1}</button>`);
+          });
+          window.restoreAnswers(qs); window.jump(0);
+          if(window.applyMathJax) window.applyMathJax();
+          
+          let startTime = Date.now();
+          if(isResume) { const storedState = JSON.parse(localStorage.getItem('cbt_active_exam') || '{}'); if(storedState && storedState.start) startTime = storedState.start; }
+          const endTime = startTime + (dur * 60000);
+          
+          clearInterval(window.timerInt);
+          window.timerInt = setInterval(() => {
+              const diff = Math.floor((endTime - Date.now()) / 1000);
+              if(diff <= 0) { window.submitExamButton(true); }
+              else { let m = Math.floor(diff/60), s = diff%60; $('#timer-disp').text(`${m}:${s<10?'0':''}${s}`); if(diff < 300) $('#timer-disp').addClass('text-danger fw-bold'); }
+          }, 1000);
+          
+          clearInterval(window.monitorInterval);
+          window.monitorInterval = setInterval(() => { window.google.script.run.updateClientProgress(window.activeExamId, window.user.ID, $('.q-nav-btn.answered').length, window.totalQ); }, 20000);
+          clearInterval(window.autosaveInterval);
+          window.autosaveInterval = setInterval(() => {
+              const key = `ANS_${window.user.ID}_${window.activeExamId}`;
+              try { const stored = localStorage.getItem(key); if(stored) { let data = JSON.parse(decodeURIComponent(atob(stored))); window.google.script.run.autosaveAnswer(window.activeExamId, window.user.ID, JSON.stringify(data)); } } catch(e){}
+          }, 60000);
+      };
+
+      window.saveAnsLocal = function(qid, type, idx) {
+          let val; 
+          if(type.includes('PG')) { if(type==='PGK') { val=[]; $(`input[name="ans-${qid}"]:checked`).each(function(){ val.push(decodeURIComponent($(this).val())) }); } else val = decodeURIComponent($(`input[name="ans-${qid}"]:checked`).val()); } 
+          else if(type === 'PGKK') { val=[]; $(`#sl-${idx} tbody tr`).each(function(x){ val.push($(`input[name="ans-${qid}-${x}"]:checked`).val()||null) }); } 
+          else if(type === 'MATCH') { const raw = $(`#ans-in-${idx}`).val(); val = raw ? JSON.parse(raw) : []; } 
+          else val = $(`#sl-${idx} textarea`).val();
+          
+          const key = `ANS_${window.user.ID}_${window.activeExamId}`;
+          let currentData = {};
+          try { const stored = localStorage.getItem(key); if(stored) currentData = JSON.parse(decodeURIComponent(atob(stored))); } catch(e) {}
+          currentData[qid] = val;
+          try { localStorage.setItem(key, btoa(encodeURIComponent(JSON.stringify(currentData)))); } catch(e) {}
+          window.markAns(idx);
+      };
+
+      window.restoreAnswers = function(qs) {
+          const key = `ANS_${window.user.ID}_${window.activeExamId}`;
+          let saved = {};
+          try { const stored = localStorage.getItem(key); if(stored) saved = JSON.parse(decodeURIComponent(atob(stored))); } catch(e) {}
+          qs.forEach((q, idx) => { 
+              const val = saved[q.QID]; 
+              if(val) { 
+                  window.markAns(idx); 
+                  if(q.Tipe === 'PGS') $(`input[name="ans-${q.QID}"][value="${encodeURIComponent(val)}"]`).prop('checked', true); 
+                  else if(q.Tipe === 'PGK') val.forEach(v => $(`input[name="ans-${q.QID}"][value="${encodeURIComponent(v)}"]`).prop('checked', true)); 
+                  else if(q.Tipe === 'Uraian') $(`textarea[name="ans-${q.QID}"]`).val(val); 
+                  else if(q.Tipe === 'PGKK') { val.forEach((v, rIdx) => { if(v) $(`input[name="ans-${q.QID}-${rIdx}"][value="${v}"]`).prop('checked', true); }); } 
+                  else if(q.Tipe === 'Menjodohkan') { $(`#ans-in-${idx}`).val(JSON.stringify(val)); setTimeout(() => window.redrawMatchLines(idx, val, q.Extra), 500); } 
+              } 
+          });
+      };
+
+      window.markAns = function(i) { $(`#nb-${i}`).addClass('answered'); };
+      window.jump = function(i) { window.currentQIdx = i; $('.q-slide').addClass('hidden');$(`#sl-${i}`).removeClass('hidden'); $('.q-nav-btn').removeClass('active-q');$(`#nb-${i}`).addClass('active-q'); if($(`#sl-${i}`).data('type')==='Menjodohkan') setTimeout(()=>window.drawLines(i), 50); if(window.applyMathJax) window.applyMathJax(); };
+      window.navSlide = function(dir) { let next = window.currentQIdx + dir; if(next >= 0 && next < window.totalQ) window.jump(next); };
+
+      window.submitExamButton = function(force = false) {
+          if (window.examSubmitting) return;
+          if (force) { window.processSubmission(); return; }
+          const answeredCount = $('.q-nav-btn.answered').length;
+          const activeState = JSON.parse(localStorage.getItem('cbt_active_exam') || '{}');
+          const reqToken = activeState.token && activeState.token !== '-' ? String(activeState.token).trim().toUpperCase() : "";
+          let inputPlace = reqToken ? 'Ketik Token Kirim...' : 'Ketik kata SELESAI...';
+          let msgHtml = `<p class="mb-3">Anda telah mengerjakan <b>${answeredCount}</b> dari <b>${window.totalQ}</b> soal.</p>`;
+          if(reqToken) { msgHtml += '<div class="alert alert-info small"><i class="fas fa-lock me-1"></i> Masukkan <b>Token Kirim Jawaban</b>:</div>'; } 
+          else { msgHtml += '<div class="alert alert-warning small">Ketik kata <b>SELESAI</b> di bawah ini untuk mengirim:</div>'; }
+          
+          window.Swal.fire({
+              title: 'Kirim Jawaban', html: `<div class="text-start">${msgHtml}</div>`, input: 'text', inputAttributes: { autocapitalize: 'characters', autocomplete: 'off' },
+              inputPlaceholder: inputPlace, icon: 'question', showCancelButton: true, allowOutsideClick: false, allowEscapeKey: false,
+              confirmButtonText: '<i class="fas fa-paper-plane me-1"></i> Kirim Sekarang', confirmButtonColor: '#198754',
+              preConfirm: (inputValue) => {
+                  let val = (inputValue || '').trim().toUpperCase();
+                  if (reqToken) { if (val !== reqToken) { window.Swal.showValidationMessage('Token Kirim Salah!'); return false; } } 
+                  else { if (val !== 'SELESAI') { window.Swal.showValidationMessage('Ketik kata SELESAI untuk mengirim.'); return false; } }
+                  return true;
+              }
+          }).then((result) => { if (result.isConfirmed) { window.processSubmission(); } });
+      };
+
+      window.processSubmission = function(retryCount = 0) {
+          if (window.examSubmitting && retryCount === 0) return;
+          window.examSubmitting = true;
+          const btn = $('#btn-finish'); 
+          if (retryCount === 0) {
+              btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Mengirim...');
+              clearInterval(window.timerInt); clearInterval(window.monitorInterval); clearInterval(window.autosaveInterval);
+              window.isExamFinished = true; window.disableSecurity();
+          }
+          let ans = [];
+          $('.q-slide').each(function(idx) {
+              const qid = $(this).data('qid'); const t =$(this).data('type'); let v = null;
+              if (t.includes('PG') && t !== 'PGKK') {
+                  if (t === 'PGK') { v = []; $(this).find('input:checked').each(function() { v.push(decodeURIComponent($(this).val())) }); }
+                  else { const checked = $(this).find('input:checked').val(); if(checked) v = decodeURIComponent(checked); }
+              }
+              else if (t === 'PGKK') { v = []; $(this).find('tbody tr').each(function(x) { v.push($(this).find('input:checked').val() || null) }); }
+              else if (t === 'Menjodohkan') { const raw = $(`#ans-in-${idx}`).val(); v = raw ? JSON.parse(raw) : []; }
+              else { v = $(this).find('textarea').val(); }
+              if (v !== null && v !== undefined) ans.push({ qid: qid, answer: v });
+          });
+          
+          window.google.script.run.withSuccessHandler((res) => {
+              window.examSubmitting = false; btn.prop('disabled', false).html('<i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN');
+              if (res.status === 'success') {
+                  localStorage.removeItem('cbt_active_exam'); localStorage.removeItem(`ANS_${window.user.ID}_${window.activeExamId}`);
+                  $('body').removeClass('exam-mode'); try { document.exitFullscreen().catch(()=>{}) } catch (e) {};
+                  window.Swal.fire({
+                      title: 'Selesai!', html: `<div class="mb-3 text-success" style="font-size: 4rem;"><i class="fas fa-check-circle"></i></div><h5 class="fw-bold">Jawaban Berhasil Dikirim</h5>`,
+                      confirmButtonText: 'KEMBALI KE BERANDA', confirmButtonColor: '#1e3a8a', allowOutsideClick: false, allowEscapeKey: false
+                  }).then(() => { 
+                    document.getElementById('view-exam').classList.add('hidden'); 
+                    document.getElementById('view-exam').style.display = 'none';
+                    document.getElementById('view-dashboard').classList.remove('hidden'); 
+                    document.getElementById('view-dashboard').style.display = 'flex';
+                    window.loadPage('siswa-home'); 
+                  });
+              } else { window.Swal.fire('Gagal', res.msg, 'error'); }
+          }).withFailureHandler((err) => {
+              if (retryCount < 3) { setTimeout(() => window.processSubmission(retryCount + 1), 3000); } 
+              else { window.examSubmitting = false; btn.prop('disabled', false); window.Swal.fire('Error', 'Gagal menghubungi server.', 'error'); }
+          }).submitExam(window.user.ID, window.activeExamId, ans, window.violationCount);
+      };
+
+      // FUNGSI MENJODOHKAN (DRAG & MATCH)
+      window.matchClick = function(qIdx, side, itemIdx, el) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; const st = window.matchState[qIdx]; $(`#match-area-${qIdx} .match-${side}`).removeClass('selected'); $(el).addClass('selected'); if(side === 'l') { st.sel = { idx: itemIdx, el: el }; } else { if(st.sel) { st.pairs = st.pairs.filter(p => p.left !== st.sel.idx); st.pairs.push({ left: st.sel.idx, right: itemIdx, rightVal: decodeURIComponent($(el).data('val')) }); window.drawLines(qIdx); window.markAns(qIdx); st.sel = null; $(`#match-area-${qIdx} .match-item`).removeClass('selected'); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); } } };
+      window.drawLines = function(qIdx) { if(!window.matchState[qIdx]) return; const svg = document.getElementById(`svg-${qIdx}`); const container = document.getElementById(`match-area-${qIdx}`); if(!container || !svg) return; const rectC = container.getBoundingClientRect(); let html = ''; let answerArr = []; const leftCount = $(`#col-l-${qIdx}`).children().length; for(let k=0; k<leftCount; k++) answerArr[k] = null; $(`#match-area-${qIdx} .match-item`).removeClass('matched'); window.matchState[qIdx].pairs.forEach(p => { const elL = $(`#col-l-${qIdx}`).children().eq(p.left)[0]; const elR = $(`#col-r-${qIdx}`).children().eq(p.right)[0]; if(elL && elR) { const rL = elL.getBoundingClientRect(); const rR = elR.getBoundingClientRect(); const x1 = rL.right - rectC.left; const y1 = (rL.top + rL.height/2) - rectC.top; const x2 = rR.left - rectC.left; const y2 = (rR.top + rR.height/2) - rectC.top; html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#10b981" stroke-width="3" />`; $(elL).addClass('matched'); $(elR).addClass('matched'); answerArr[p.left] = p.rightVal; } }); svg.innerHTML = html; $(`#ans-in-${qIdx}`).val(JSON.stringify(answerArr)); };
+      window.resetMatch = function(qIdx) { window.matchState[qIdx] = { sel: null, pairs: [] }; document.getElementById(`svg-${qIdx}`).innerHTML = ''; $(`#match-area-${qIdx} .match-item`).removeClass('matched selected'); $(`#ans-in-${qIdx}`).val(''); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); };
+      window.redrawMatchLines = function(qIdx, savedArr, rightItems) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; if(Array.isArray(savedArr)) { window.matchState[qIdx].pairs = []; savedArr.forEach((val, lIdx) => { if(val) { const rIdx = rightItems.indexOf(val); if(rIdx > -1) { window.matchState[qIdx].pairs.push({ left: lIdx, right: rIdx, rightVal: val }); } } }); window.drawLines(qIdx); } };
       // =================================================================
       // 8. EDITOR SOAL SUMMERNOTE (100% BEKERJA)
       // =================================================================
@@ -1223,19 +1461,43 @@ export default function Page() {
       window.removeOptRow = function(btn) { $(btn).closest('.ans-row').remove(); };
 
       window.saveQBlock = function(uid) {
-          const form = $('#frm-q-'+uid); const type = form.find('select[name="type"]').val(); const text = $('#sn-'+uid).summernote('code');
-          const score = form.find('input[name="score"]').val(); const num = form.find('input[name="num"]').val();
-          const id = form.find('input[name="id"]').val(); let opts=[], keys=[], keyIndices=[];
+          const form = $('#frm-q-'+uid); 
+          const type = form.find('select[name="type"]').val(); 
+          const text = $('#sn-'+uid).summernote('code');
+          const score = form.find('input[name="score"]').val(); 
+          const num = form.find('input[name="num"]').val();
+          const id = form.find('input[name="id"]').val(); 
+          let opts=[], keys=[], keyIndices=[];
           
           if (type === 'PGS' || type === 'PGK') { 
               $('#opts-wrap-'+uid+' .ans-row').each(function(){ 
                   const v = $(this).find('.summernote-opt').summernote('code'); 
-                  if(v && v !== '<p><br></p>'){ opts.push(v); if($(this).find('.form-check-input').is(':checked')) { keys.push(v); keyIndices.push(opts.length - 1); } } }); } else if(type==='PGKK') {$('#pgkk-tbody-'+uid+' tr').each(function(){ const q = $(this).find('.pgkk-q').summernote('code'); if(q){ opts.push(q); keys.push($(this).find('.pgkk-k').val()); } });
+                  if(v && v !== '<p><br></p>'){ 
+                      opts.push(v); 
+                      // FIX: Selector input yang diperbaiki agar membaca kunci dengan akurat
+                      if($(this).find('input[type="radio"], input[type="checkbox"]').is(':checked')) { 
+                          keys.push(v); 
+                          keyIndices.push(opts.length - 1); 
+                      } 
+                  } 
+              });
+          } else if(type==='PGKK') { 
+              $('#pgkk-tbody-'+uid+' tr').each(function(){ 
+                  const q = $(this).find('.pgkk-q').summernote('code'); 
+                  if(q){ opts.push(q); keys.push($(this).find('.pgkk-k').val()); } 
+              });
           } else if(type==='Menjodohkan') { 
-              $('#match-tbody-'+uid+' tr').each(function(){ const l = $(this).find('.match-l').summernote('code'); const r =$(this).find('.match-r').summernote('code'); if(l && r){ opts.push(l); keys.push(r); } });
-          } else { keys = form.find('textarea[name="essay_key"]').val().split(','); } 
+              $('#match-tbody-'+uid+' tr').each(function(){ 
+                  const l = $(this).find('.match-l').summernote('code'); 
+                  const r = $(this).find('.match-r').summernote('code'); 
+                  if(l && r && l !== '<p><br></p>' && r !== '<p><br></p>'){ opts.push(l); keys.push(r); } 
+              });
+          } else { 
+              keys = form.find('textarea[name="essay_key"]').val().split(','); 
+          } 
           
-          const payload={id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID}; 
+          const payload = { id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID }; 
+          
           const btn = form.find('button.btn-success');
           const origText = btn.html();
           btn.prop('disabled',true).html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...');
@@ -1252,7 +1514,10 @@ export default function Page() {
                   if (existingIdx !== -1) window.currentQuestionsData[existingIdx] = newData;
                   else { window.currentQuestionsData.push(newData); window.currentQuestionsData.sort((a,b) => (Number(a.Nomor)||999) - (Number(b.Nomor)||999)); }
               } else window.Swal.fire('Error',res.msg,'error');
-          }).withFailureHandler(err => { btn.prop('disabled',false).html(origText); window.Swal.fire('Error', err.message, 'error'); }).adminSaveSingleQuestion(window.activeExamId, payload);
+          }).withFailureHandler(err => { 
+              btn.prop('disabled',false).html(origText); 
+              window.Swal.fire('Error', err.message, 'error'); 
+          }).adminSaveSingleQuestion(window.activeExamId, payload);
       };
 
       window.deleteQBlock = function(uid) {
