@@ -36,7 +36,8 @@ export default function Page() {
     window.violationLock = false;
     window.matchState = {};
 
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let audioCtx = null;
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
     let finalBeepOsc = null;
     let beepInterval = null;
 
@@ -53,10 +54,12 @@ export default function Page() {
       const $ = window.jQuery;
 
       // =================================================================
-      // ALARM PELANGGARAN UJIAN
+      // 3. FUNGSI AUDIO ALARM (PELANGGARAN UJIAN)
       // =================================================================
       window.playBeep = function(times, continuous = false) {
+          if(!audioCtx) return;
           if(audioCtx.state === 'suspended') audioCtx.resume();
+          
           if (continuous) {
               finalBeepOsc = audioCtx.createOscillator();
               const gainNode = audioCtx.createGain();
@@ -92,7 +95,7 @@ export default function Page() {
       };
 
       // =================================================================
-      // 3. FUNGSI NATIVE UI & KONTROL MODAL BOOTSTRAP
+      // 4. FUNGSI NATIVE UI & KONTROL MODAL BOOTSTRAP
       // =================================================================
       window.showLoad = function(show) {
           const loader = document.getElementById('loader');
@@ -106,15 +109,15 @@ export default function Page() {
           const el = document.getElementById(id);
           if (!el) return;
           if (window.bootstrap) {
-              const modalInstance = window.bootstrap.Modal.getOrCreateInstance(el);
-              modalInstance.show();
+              window.bootstrap.Modal.getOrCreateInstance(el).show();
           } else {
               $(el).modal('show');
           }
+          // Paksa Z-Index ke Lapisan Terdepan untuk menimpa backdrop
           setTimeout(() => {
-              document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '10500'; });
               el.style.zIndex = '10505';
-          }, 150);
+              document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '10500'; });
+          }, 50);
       };
 
       window.closeModal = function(id) {
@@ -155,7 +158,7 @@ export default function Page() {
       };
 
       // =================================================================
-      // 4. PROXY API TURSO (DIJAMIN STABIL)
+      // 5. PROXY API TURSO (DIJAMIN STABIL)
       // =================================================================
       window.google = {
         script: {
@@ -191,7 +194,7 @@ export default function Page() {
       };
 
       // =================================================================
-      // 5. LOGIKA HALAMAN, LOGIN & MENU (ANTI TUMPANG TINDIH)
+      // 6. LOGIKA HALAMAN, LOGIN & MENU (ANTI TUMPANG TINDIH)
       // =================================================================
       window.handleLogin = async function() {
           const u = document.getElementById('u-login').value;
@@ -360,21 +363,7 @@ export default function Page() {
       };
 
       // =================================================================
-      // FILTER RIWAYAT SISWA
-      // =================================================================
-      window.filterSiswaHistory = function() {
-          const f = document.getElementById('filter-history-mapel').value;
-          $('#tbl-siswa-history tbody tr').each(function() {
-              if (f === '' || $(this).data('mapel') === f) {
-                  $(this).show();
-              } else {
-                  $(this).hide();
-              }
-          });
-      };
-
-      // =================================================================
-      // 6. RENDER KONTEN (PENGGANTIAN DIV NATIVE)
+      // 7. RENDER KONTEN DASHBOARD (PENGGANTIAN DIV NATIVE)
       // =================================================================
       window.renderContent = function(page) {
           try {
@@ -411,49 +400,45 @@ export default function Page() {
                   let availExams = window.gData?.availableExams || [];
                   let historyData = window.gData?.history || [];
                   
-                  h = `<div class="card mb-4 border-0 shadow-sm bg-primary text-white"><div class="card-body"><h5 class="fw-bold">Halo, ${window.user.Nama}</h5></div></div><h5 class="fw-bold mb-3 border-bottom pb-2 text-primary">Ujian Aktif</h5><div class="row g-4 mb-5">`;
+                  // Petakan Judul & Mapel ke Data History (Turso column mapping compensation)
+                  historyData = historyData.map(h => {
+                      let ex = availExams.find(e => e.ExamID === h.ExamID) || window.gData?.exams?.find(e => e.ExamID === h.ExamID) || {};
+                      return {
+                          ...h,
+                          Judul: h.Judul || ex.Judul || h.ExamID,
+                          Mapel: h.Mapel || ex.Mapel || 'Umum',
+                          Nilai: h.TotalNilai !== undefined ? h.TotalNilai : (h.Nilai !== undefined ? h.Nilai : '0')
+                      };
+                  });
                   
-                  const now = new Date();
-                  if(availExams.length === 0) { 
-                      h += '<div class="col-12"><div class="alert alert-info text-center">Tidak ada ujian aktif saat ini.</div></div>'; 
-                  } else {
+                  h = `<div class="card mb-4 border-0 shadow-sm bg-primary text-white"><div class="card-body"><h5 class="fw-bold">Halo, ${window.user.Nama}</h5></div></div><h5 class="fw-bold mb-3 border-bottom pb-2 text-primary">Ujian Aktif</h5><div class="row g-4 mb-5">`;
+                  if(availExams.length === 0) { h += '<div class="col-12"><div class="alert alert-info text-center">Tidak ada ujian aktif saat ini.</div></div>'; } 
+                  else {
                       availExams.forEach(e => {
+                          // Filter Batas Pengerjaan (LimitTries)
+                          let historyCount = historyData.filter(hx => hx.ExamID === e.ExamID).length;
+                          let limit = Number(e.LimitTries) || 1;
+                          if (historyCount >= limit) { e.IsFinished = true; }
+                          
                           let btnState = '', btnText = 'MULAI UJIAN', btnClass = 'btn-primary';
-                          let isExpired = false;
-                          if (e.EndDate) {
-                              const endDate = new Date(e.EndDate.replace(' ', 'T'));
-                              if (now > endDate) isExpired = true;
-                          }
-                          
-                          if (e.IsFinished) { btnState = 'disabled'; btnText = 'SUDAH DIKERJAKAN'; btnClass = 'btn-secondary'; }
-                          else if (e.IsExpired || isExpired) { btnState = 'disabled'; btnText = 'WAKTU HABIS'; btnClass = 'btn-danger'; }
-                          
+                          if (e.IsFinished) { btnState = 'disabled'; btnText = 'BATAS PENGERJAAN HABIS'; btnClass = 'btn-secondary'; }
+                          else if (e.IsExpired) { btnState = 'disabled'; btnText = 'WAKTU HABIS'; btnClass = 'btn-danger'; }
                           h += `<div class="col-md-6 col-lg-4"><div class="card h-100 shadow-sm border-0"><div class="card-body"><h5 class="fw-bold text-primary">${e.Judul}</h5><div class="mb-2"><span class="badge bg-primary">${e.Mapel}</span> <span class="badge bg-light text-dark border">${e.Durasi} Menit</span></div><button class="btn ${btnClass} w-100 fw-bold shadow-sm" onclick="window.startExam('${e.ExamID}')" ${btnState}>${btnText}</button></div></div></div>`;
                       });
                   }
                   
-                  // HISTORY SECTION WITH FILTER
-                  const uniqueGroups = [...new Set(historyData.map(r => r.Mapel || r.Judul || 'Umum'))];
-                  h += `<div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2 mt-4">
-                           <h5 class="fw-bold text-primary m-0"><i class="fas fa-history me-2"></i>Riwayat</h5>
-                           <select id="filter-history-mapel" class="form-select form-select-sm w-auto shadow-sm border-primary" onchange="window.filterSiswaHistory()">
-                               <option value="">Semua Mapel</option>
-                               ${uniqueGroups.map(g => `<option value="${g}">${g}</option>`).join('')}
-                           </select>
-                        </div>`;
+                  // Filter Dinamis untuk Riwayat Mapel
+                  let uniqueMapelRiwayat = [...new Set(historyData.map(r => r.Mapel || 'Umum'))];
+                  let filterHtml = `<select class="form-select form-select-sm w-auto shadow-sm" onchange="window.filterRiwayatSiswa(this.value)"><option value="">Semua Mapel</option>${uniqueMapelRiwayat.map(m=>`<option value="${m}">${m}</option>`).join('')}</select>`;
                   
-                  if(historyData.length === 0) { 
-                      h += '<p class="text-muted fst-italic">Belum ada riwayat.</p>'; 
-                  } else {
-                      h += `<div class="table-responsive bg-white rounded shadow-sm p-3"><table class="table table-hover align-middle mb-0" id="tbl-siswa-history"><thead><tr class="table-light"><th>Tanggal</th><th>Ujian / Mapel</th><th>Nilai</th><th>Status</th></tr></thead><tbody>`;
+                  h += `<div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2 mt-4"><h5 class="fw-bold text-primary m-0"><i class="fas fa-history me-2"></i>Riwayat</h5>${filterHtml}</div>`;
+                  
+                  if(historyData.length === 0) { h += '<p class="text-muted fst-italic">Belum ada riwayat.</p>'; } 
+                  else {
+                      h += `<div class="table-responsive bg-white rounded shadow-sm p-3"><table class="table table-hover align-middle mb-0"><thead><tr class="table-light"><th>Tanggal</th><th>Mapel</th><th>Ujian</th><th>Nilai</th><th>Status</th></tr></thead><tbody>`;
                       historyData.forEach(r => { 
-                          const groupName = r.Mapel || r.Judul || 'Umum';
-                          h += `<tr data-mapel="${groupName}">
-                                  <td>${r.WaktuSubmit}</td>
-                                  <td><div class="fw-bold">${r.Judul || 'Ujian'}</div><small class="text-muted">${r.Mapel || ''}</small></td>
-                                  <td><span class="badge bg-warning text-dark">${r.TotalNilai || r.Nilai || 0}</span></td>
-                                  <td><span class="badge bg-success">Selesai</span></td>
-                                </tr>`; 
+                          let mapel = r.Mapel || 'Umum';
+                          h += `<tr class="riwayat-row" data-mapel="${mapel}"><td>${r.WaktuSubmit}</td><td><span class="badge bg-info">${mapel}</span></td><td><div class="fw-bold">${r.Judul}</div></td><td><span class="badge bg-warning text-dark">${r.Nilai}</span></td><td><span class="badge bg-success">Selesai</span></td></tr>`; 
                       });
                       h += `</tbody></table></div>`;
                   }
@@ -464,6 +449,14 @@ export default function Page() {
               const area = document.getElementById('content-area');
               if(area) area.innerHTML = `<div class="alert alert-danger">Error memproses data: ${err.message}.</div>`;
           }
+      };
+
+      // FUNGSI PENDUKUNG FILTER RIWAYAT SISWA
+      window.filterRiwayatSiswa = function(val) {
+          document.querySelectorAll('.riwayat-row').forEach(row => {
+              if(!val || row.getAttribute('data-mapel') === val) row.style.display = '';
+              else row.style.display = 'none';
+          });
       };
 
       // =================================================================
@@ -970,7 +963,217 @@ export default function Page() {
       };
 
       // =================================================================
-      // FUNGSI UJIAN SISWA (START, RUN, SUBMIT, SECURITY)
+      // 7. FUNGSI PENYIMPANAN DATA (TURSO) & MODAL DATA
+      // =================================================================
+      window.openExamModal = function(str) {
+          document.getElementById('frm-exam').reset();
+          document.getElementById('ex-id').value = '';
+          let d = null;
+          if(str) {
+              d = JSON.parse(decodeURIComponent(str));
+              document.getElementById('ex-id').value = d.ExamID || '';
+              document.getElementById('ex-judul').value = d.Judul || '';
+              document.getElementById('ex-mapel').value = d.Mapel || '';
+              document.getElementById('ex-durasi').value = d.Durasi || '';
+              document.getElementById('ex-limit').value = d.LimitTries || 1;
+              document.getElementById('ex-start').value = d.StartDate ? d.StartDate.replace(' ','T') : '';
+              document.getElementById('ex-end').value = d.EndDate ? d.EndDate.replace(' ','T') : '';
+              document.getElementById('ex-token').value = d.Token || '';
+              document.getElementById('ex-randomQ').checked = d.RandomQ === 'Yes';
+              document.getElementById('ex-showStats').checked = d.ShowStats === 'Yes';
+              document.getElementById('ex-violations').value = d.MaxViolations || 3;
+          } else {
+              document.getElementById('ex-violations').value = 3;
+              document.getElementById('ex-limit').value = 1;
+          }
+
+          const role = String(window.user.Role).trim().toLowerCase();
+          const container = document.getElementById('kelas-container');
+
+          if (role === 'guru') {
+              const kelasArr = String(window.user.Kelas).split(',').map(k => k.trim()).filter(k => k);
+              let selectedKelas = d && d.TargetKelas ? String(d.TargetKelas).split(',').map(k => k.trim()) : kelasArr;
+              let htmlKelas = `<div class="d-flex flex-wrap gap-2 mt-2">`;
+              kelasArr.forEach(k => {
+                  const isChecked = selectedKelas.includes(k) ? 'checked' : '';
+                  htmlKelas += `<div class="form-check"><input class="form-check-input kls-cb" type="checkbox" value="${k}" id="cb-${k}" ${isChecked}><label class="form-check-label small" for="cb-${k}">${k}</label></div>`;
+              });
+              htmlKelas += `</div>`;
+              container.innerHTML = htmlKelas;
+          } else {
+              let valKelas = d && d.TargetKelas ? d.TargetKelas : '';
+              container.innerHTML = `<input type="text" id="ex-kelas" class="form-control" placeholder="Contoh: 7A, 7B" value="${valKelas}" required>`;
+          }
+          window.openModal('modalExam');
+      };
+
+      window.saveExam = function() {
+          let targetKelas = "";
+          const role = String(window.user.Role).trim().toLowerCase();
+          
+          if (role === 'guru') {
+              let selectedKls = [];
+              document.querySelectorAll('.kls-cb:checked').forEach(cb => selectedKls.push(cb.value));
+              if (selectedKls.length === 0) {
+                  window.Swal.fire('Error', 'Pilih minimal 1 target kelas!', 'error'); return;
+              }
+              targetKelas = selectedKls.join(', ');
+          } else {
+              const klsEl = document.getElementById('ex-kelas');
+              if(klsEl) targetKelas = klsEl.value;
+          }
+
+          const d = {
+              examId: document.getElementById('ex-id').value,
+              judul: document.getElementById('ex-judul').value,
+              mapel: document.getElementById('ex-mapel').value,
+              durasi: document.getElementById('ex-durasi').value,
+              start: document.getElementById('ex-start').value,
+              end: document.getElementById('ex-end').value,
+              limit: document.getElementById('ex-limit').value,
+              token: document.getElementById('ex-token').value,
+              maxViolations: document.getElementById('ex-violations').value,
+              showStats: document.getElementById('ex-showStats').checked ? 'Yes' : 'No',
+              randomQ: document.getElementById('ex-randomQ').checked ? 'Yes' : 'No',
+              targetKelas: targetKelas,
+              userRole: window.user.Role,
+              userClass: window.user.Kelas,
+              userId: window.user.ID
+          };
+
+          if (!d.judul || !d.mapel || !d.start || !d.end || !d.targetKelas) {
+              window.Swal.fire('Error', 'Lengkapi data wajib!', 'error'); return;
+          }
+
+          const btn = document.querySelector('#frm-exam button[type="submit"]');
+          const origBtn = btn.innerHTML;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+          btn.disabled = true;
+
+          window.google.script.run.withSuccessHandler((res) => {
+              if(res.status === 'success') {
+                  window.closeModal('modalExam');
+                  window.google.script.run.withSuccessHandler(res2 => {
+                      btn.innerHTML = origBtn; btn.disabled = false;
+                      if (res2.status === 'success') { 
+                          window.gData = res2.data; window.renderContent('admin-ujian'); window.toast('success', 'Jadwal Disimpan!'); 
+                      } else { window.Swal.fire('Gagal', res2.msg, 'error'); }
+                  }).withFailureHandler(err => { btn.innerHTML = origBtn; btn.disabled = false; window.Swal.fire('Error', err.message, 'error'); }).getDashboardData(window.user.Role, window.user.ID, window.user.Kelas);
+              } else { 
+                  btn.innerHTML = origBtn; btn.disabled = false;
+                  window.Swal.fire('Gagal', res.msg, 'error'); 
+              }
+          }).withFailureHandler(err => { btn.innerHTML = origBtn; btn.disabled = false; window.Swal.fire('Error', err.message, 'error'); }).adminSaveExam(d);
+      };
+
+      window.delExam = function(id){ window.Swal.fire({title:'Hapus Jadwal?', icon:'warning', showCancelButton:true}).then(r=>{if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.showLoad(false); window.loadPage('admin-ujian')}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error')}).adminDeleteExam(id, window.user.ID, window.user.Role); } }) };
+
+      // --- USER & REKAP ---
+      window.openUserModal = function(str) {
+          document.getElementById('frm-user').reset(); document.getElementById('mu-id').value = '';
+          if(str) {
+              const u = JSON.parse(decodeURIComponent(str));
+              document.getElementById('mu-id').value = u.ID || '';
+              document.getElementById('mu-nama').value = u.Nama || '';
+              document.getElementById('mu-user').value = u.Username || '';
+              document.getElementById('mu-pass').value = u.Password || '';
+              document.getElementById('mu-role').value = u.Role || 'siswa';
+              document.getElementById('mu-kelas').value = u.Kelas || '';
+              document.getElementById('mu-sekolah').value = u.Sekolah || '';
+          }
+          window.openModal('modalUser');
+      };
+
+      window.saveUser = function() {
+          const d = {
+              id: document.getElementById('mu-id').value,
+              nama: document.getElementById('mu-nama').value,
+              username: document.getElementById('mu-user').value,
+              password: document.getElementById('mu-pass').value,
+              role: document.getElementById('mu-role').value,
+              kelas: document.getElementById('mu-kelas').value,
+              sekolah: document.getElementById('mu-sekolah').value
+          };
+          const btn = document.querySelector('#frm-user button[type="submit"]');
+          const origBtn = btn.innerHTML;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+          btn.disabled = true;
+
+          window.google.script.run.withSuccessHandler(()=>{
+              btn.innerHTML = origBtn; btn.disabled = false;
+              window.closeModal('modalUser'); window.loadPage('admin-users');
+          }).withFailureHandler(err => {
+              btn.innerHTML = origBtn; btn.disabled = false; window.Swal.fire('Error', err.message, 'error');
+          }).adminManageUser('save', d);
+      };
+
+      window.delUser = function(id){ window.Swal.fire({title:'Hapus User?', icon:'warning', showCancelButton:true, confirmButtonColor: '#d33'}).then(r=>{if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(()=>{window.loadPage('admin-users');}).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error')}).adminManageUser('delete',{id:id}); } }) };
+
+      window.openKatrolModal = function() { window.openModal('modalKatrol'); };
+
+      window.applyKatrolMassal = function() {
+          const katrolInput = document.getElementById('katrol-value');
+          const addVal = katrolInput ? parseFloat(katrolInput.value) || 0 : 0;
+          if(addVal === 0) { window.Swal.fire('Perhatian', 'Masukkan nilai katrol yang valid.', 'warning'); return; }
+          if(!window.currentFilteredData || window.currentFilteredData.length === 0) { window.Swal.fire('Data Kosong', 'Tidak ada data di tabel untuk dikatrol.', 'info'); return; }
+          
+          window.Swal.fire({ title: 'Konfirmasi Katrol Nilai', text: `Anda yakin menambahkan nilai sebesar ${addVal} ke${window.currentFilteredData.length} siswa di tabel ini?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Eksekusi', }).then((result) => {
+              if(result.isConfirmed) { 
+                  window.showLoad(true); const rids = window.currentFilteredData.map(d => d.ResultID); 
+                  window.google.script.run.withSuccessHandler(res => { 
+                      window.showLoad(false); window.closeModal('modalKatrol'); 
+                      if (res.status === 'success') { window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); } 
+                      else { window.Swal.fire('Gagal', res.msg, 'error'); } 
+                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminKatrolMassal(rids, addVal); 
+              }
+          });
+      };
+
+      window.openKoreksi = function(rid) {
+          const d = window.recapDataStore[rid]; if (!d) return;
+          let detailArr = []; try { detailArr = JSON.parse(d.detail); } catch(e){}
+          let html = `<input type="hidden" id="kor-rid" value="${rid}"><div class="alert alert-info border-0 shadow-sm">Siswa: <b>${d.nama}</b><br>Ujian: <b>${d.ujian}</b></div>`;
+          html += `<div class="alert alert-warning mb-3">Total Nilai Saat Ini: <b class="fs-5">${d.nilai}</b><br>Anda dapat memodifikasi skor per soal di bawah ini.</div>`;
+          
+          detailArr.forEach((item, index) => {
+              let no = item.i !== undefined ? item.i : item[0]; let score = item.s !== undefined ? item.s : item[1]; let type = item.t || 'Objektif'; let ans = item.a !== undefined ? item.a : ''; let max = item.m !== undefined ? item.m : 0;
+              html += `<div class="card mb-2 border-0 shadow-sm"><div class="card-body p-3"><div class="d-flex justify-content-between align-items-center mb-2"><strong class="text-primary">Soal No. ${no} <span class="badge bg-secondary ms-1">${type}</span></strong><div class="fw-bold d-flex align-items-center">Skor: <input type="number" step="0.1" class="form-control form-control-sm d-inline w-auto kor-score ms-2" data-idx="${index}" value="${score}" style="max-width: 80px;"> <span class="ms-1 text-muted">/ ${max}</span></div></div>`;
+              let displayAns = Array.isArray(ans) ? ans.join(', ') : ans;
+              html += `<div class="p-2 bg-light rounded border small mt-2"><b>Jawaban Siswa:</b><br>${displayAns ? String(displayAns).replace(/\n/g, '<br>') : '<i class="text-muted">Tidak dijawab</i>'}</div></div></div>`;
+          });
+          document.getElementById('kor-body').innerHTML = html;
+          window.openModal('modalKoreksi');
+      };
+
+      window.saveKoreksi = function() {
+          const rid = document.getElementById('kor-rid').value; 
+          const d = window.recapDataStore[rid]; let detailArr = JSON.parse(d.detail);
+          
+          document.querySelectorAll('.kor-score').forEach(input => {
+              const idx = input.getAttribute('data-idx'); detailArr[idx].s = parseFloat(input.value) || 0;
+          });
+
+          let maxTotal = 0, totalScore = 0;
+          detailArr.forEach(item => { maxTotal += (item.m || 0); totalScore += (item.s || 0); });
+          const finalScore = maxTotal > 0 ? Number(((totalScore / maxTotal) * 100).toFixed(2)) : totalScore;
+          
+          const btn = document.getElementById('btn-save-kor'); 
+          if(btn) { btn.disabled = true; btn.innerText = 'Menyimpan...'; }
+          
+          window.google.script.run.withSuccessHandler(res => {
+              if(btn) { btn.disabled = false; btn.innerText = 'Simpan Perubahan'; }
+              if (res.status === 'success') { window.closeModal('modalKoreksi'); window.Swal.fire('Sukses', res.msg, 'success'); window.loadPage('hasil-rekap'); } 
+              else { window.Swal.fire('Gagal', res.msg, 'error'); }
+          }).withFailureHandler(err => { 
+              if(btn) { btn.disabled = false; btn.innerText = 'Simpan Perubahan'; }
+              window.Swal.fire('Error', err.message, 'error'); 
+          }).adminUpdateResult(rid, finalScore, JSON.stringify(detailArr));
+      };
+
+      window.deleteResult = function(rid) { window.Swal.fire({title:'Hapus & Reset Ujian?', text:'Data dihapus, cache/status ujian direset, dan siswa bisa ujian kembali.', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33'}).then(r=>{ if(r.isConfirmed) { window.showLoad(true); window.google.script.run.withSuccessHandler(res=>{ window.showLoad(false); if(res.status==='success'){ window.Swal.fire('Berhasil',res.msg,'success'); window.loadPage('hasil-rekap'); } else window.Swal.fire('Gagal',res.msg,'error'); }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).adminDeleteResult(rid); } }); };
+
+      // =================================================================
+      // 8. FUNGSI UJIAN SISWA (START, RUN, SUBMIT, SECURITY)
       // =================================================================
       window.startExam = function(eid) {
           try { if (screen.orientation && screen.orientation.unlock) { screen.orientation.unlock(); } } catch (e) {}
@@ -1043,6 +1246,7 @@ export default function Page() {
       window.triggerViolation = function(msg) {
           if(window.violationLock || window.isExamFinished) return;
           window.violationLock = true; window.violationCount++; 
+          
           if (window.violationCount >= window.activeExamViolations) {
               window.playBeep(0, true);
               window.isExamFinished = true; window.submitExamButton(true); 
@@ -1070,7 +1274,7 @@ export default function Page() {
                   inp += `</tbody></table>`;
               } else if(q.Tipe==='Menjodohkan') {
                   const lItems = JSON.parse(q.Options||"[]"); const rItems = q.Extra || [];
-                  inp = `<div class="match-container" id="match-area-${i}"><input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})"><svg class="match-svg" id="svg-${i}"></svg><div class="match-col" id="col-l-${i}">${lItems.map((t,Idx)=>`<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div><div class="match-col" id="col-r-${i}">${rItems.map((t,Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r',${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="window.resetMatch(${i})">Reset Garis</button></div>`;
+                  inp = `<div class="match-container" id="match-area-${i}"><input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})"><svg class="match-svg" id="svg-${i}"></svg><div class="match-col" id="col-l-${i}">${lItems.map((t,Idx)=>`<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div><div class="match-col" id="col-r-${i}">${rItems.map((t,Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="window.resetMatch(${i})">Reset Garis</button></div>`;
               } else if(q.Tipe.includes('PG')) {
                   const opts = JSON.parse(q.Options||"[]");
                   opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
@@ -1134,7 +1338,7 @@ export default function Page() {
       };
 
       window.markAns = function(i) { $(`#nb-${i}`).addClass('answered'); };
-      window.jump = function(i) { window.currentQIdx = i; $('.q-slide').addClass('hidden');$(`#sl-${i}`).removeClass('hidden'); $('.q-nav-btn').removeClass('active-q');$(`#nb-${i}`).addClass('active-q'); if($(`#sl-${i}`).data('type')==='Menjodohkan') setTimeout(()=>window.drawLines(i), 50); if(window.applyMathJax) window.applyMathJax(); };
+      window.jump = function(i) { window.currentQIdx = i; $('.q-slide').addClass('hidden'); $(`#sl-${i}`).removeClass('hidden'); $('.q-nav-btn').removeClass('active-q'); $(`#nb-${i}`).addClass('active-q'); if($(`#sl-${i}`).data('type')==='Menjodohkan') setTimeout(()=>window.drawLines(i), 50); if(window.applyMathJax) window.applyMathJax(); };
       window.navSlide = function(dir) { let next = window.currentQIdx + dir; if(next >= 0 && next < window.totalQ) window.jump(next); };
 
       window.submitExamButton = function(force = false) {
@@ -1172,7 +1376,7 @@ export default function Page() {
           }
           let ans = [];
           $('.q-slide').each(function(idx) {
-              const qid = $(this).data('qid'); const t =$(this).data('type'); let v = null;
+              const qid = $(this).data('qid'); const t = $(this).data('type'); let v = null;
               if (t.includes('PG') && t !== 'PGKK') {
                   if (t === 'PGK') { v = []; $(this).find('input:checked').each(function() { v.push(decodeURIComponent($(this).val())) }); }
                   else { const checked = $(this).find('input:checked').val(); if(checked) v = decodeURIComponent(checked); }
@@ -1205,13 +1409,14 @@ export default function Page() {
           }).submitExam(window.user.ID, window.activeExamId, ans, window.violationCount);
       };
 
+      // FUNGSI MENJODOHKAN (DRAG & MATCH)
       window.matchClick = function(qIdx, side, itemIdx, el) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; const st = window.matchState[qIdx]; $(`#match-area-${qIdx} .match-${side}`).removeClass('selected'); $(el).addClass('selected'); if(side === 'l') { st.sel = { idx: itemIdx, el: el }; } else { if(st.sel) { st.pairs = st.pairs.filter(p => p.left !== st.sel.idx); st.pairs.push({ left: st.sel.idx, right: itemIdx, rightVal: decodeURIComponent($(el).data('val')) }); window.drawLines(qIdx); window.markAns(qIdx); st.sel = null; $(`#match-area-${qIdx} .match-item`).removeClass('selected'); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); } } };
       window.drawLines = function(qIdx) { if(!window.matchState[qIdx]) return; const svg = document.getElementById(`svg-${qIdx}`); const container = document.getElementById(`match-area-${qIdx}`); if(!container || !svg) return; const rectC = container.getBoundingClientRect(); let html = ''; let answerArr = []; const leftCount = $(`#col-l-${qIdx}`).children().length; for(let k=0; k<leftCount; k++) answerArr[k] = null; $(`#match-area-${qIdx} .match-item`).removeClass('matched'); window.matchState[qIdx].pairs.forEach(p => { const elL = $(`#col-l-${qIdx}`).children().eq(p.left)[0]; const elR = $(`#col-r-${qIdx}`).children().eq(p.right)[0]; if(elL && elR) { const rL = elL.getBoundingClientRect(); const rR = elR.getBoundingClientRect(); const x1 = rL.right - rectC.left; const y1 = (rL.top + rL.height/2) - rectC.top; const x2 = rR.left - rectC.left; const y2 = (rR.top + rR.height/2) - rectC.top; html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#10b981" stroke-width="3" />`; $(elL).addClass('matched'); $(elR).addClass('matched'); answerArr[p.left] = p.rightVal; } }); svg.innerHTML = html; $(`#ans-in-${qIdx}`).val(JSON.stringify(answerArr)); };
       window.resetMatch = function(qIdx) { window.matchState[qIdx] = { sel: null, pairs: [] }; document.getElementById(`svg-${qIdx}`).innerHTML = ''; $(`#match-area-${qIdx} .match-item`).removeClass('matched selected'); $(`#ans-in-${qIdx}`).val(''); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); };
       window.redrawMatchLines = function(qIdx, savedArr, rightItems) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; if(Array.isArray(savedArr)) { window.matchState[qIdx].pairs = []; savedArr.forEach((val, lIdx) => { if(val) { const rIdx = rightItems.indexOf(val); if(rIdx > -1) { window.matchState[qIdx].pairs.push({ left: lIdx, right: rIdx, rightVal: val }); } } }); window.drawLines(qIdx); } };
       
       // =================================================================
-      // 8. EDITOR SOAL SUMMERNOTE
+      // 9. EDITOR SOAL SUMMERNOTE (KUNCI JAWABAN FIX)
       // =================================================================
       window.manageQ = function(id) { 
           window.activeExamId = id; 
@@ -1297,19 +1502,14 @@ export default function Page() {
           const block = $('#block-'+uid); let qData = {}; 
           try { qData = JSON.parse(decodeURIComponent(block.attr('data-q-obj'))); } catch(e){} 
           const opts = (qData.Tipe === type) ? JSON.parse(qData.Options || "[]") : [];
-          const keys = (qData.Tipe === type) ? JSON.parse(qData.Key || "[]") : []; 
+          const keys = (qData.Tipe === type) ? JSON.parse(qData.KeyAnswer || qData.Key || "[]") : []; 
           $('#ans-area-'+uid+' .summernote-opt').each(function(){ $(this).summernote('destroy'); }); let h = '';
           
           if (type === 'PGS' || type === 'PGK') { 
               const inputType = type === 'PGS' ? 'radio' : 'checkbox';
               h = `<button type="button" class="btn btn-outline-primary btn-sm mb-2" onclick="window.addOptRow('${uid}', '${inputType}')">+ Opsi</button><div id="opts-wrap-${uid}">`; 
-              if(opts.length) {
-                  opts.forEach(o => {
-                      const isChecked = keys.some(k => k === o) ? 'checked' : '';
-                      h+=window.genOptRow(uid, inputType, o, isChecked);
-                  });
-              } else h+=window.genOptRow(uid, inputType); 
-              h+='</div>'; 
+              if(opts.length) opts.forEach(o => h+=window.genOptRow(uid, inputType, o, keys.map(k=>k.trim()).includes(o.trim())?'checked':''));
+              else h+=window.genOptRow(uid, inputType); h+='</div>'; 
           } else if (type === 'PGKK') { 
               h = `<table class="table table-sm"><thead><tr><th>Pernyataan</th><th>Kunci</th><th>X</th></tr></thead><tbody id="pgkk-tbody-${uid}">`; 
               if(opts.length) opts.forEach((o,i)=>h+=window.genPGKKRow(o,keys[i])); else h+=window.genPGKKRow(); h+=`</tbody></table><button type="button" class="btn btn-sm btn-info" onclick="window.addPGKKRowTo('${uid}')">+ Baris</button>`; 
@@ -1325,9 +1525,7 @@ export default function Page() {
           $('#ans-area-'+uid+' .summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); 
       };
 
-      window.genOptRow = function(uid, type, val='', checked='') { 
-          return `<div class="d-flex align-items-start mb-2 ans-row gap-2"><div class="mt-2"><input type="${type}" name="k_${uid}" class="form-check-input" style="transform: scale(1.5); cursor: pointer;" ${checked}></div><div class="flex-grow-1"><textarea class="summernote-opt">${val}</textarea></div><button type="button" class="btn btn-outline-danger mt-1" onclick="window.removeOptRow(this)">X</button></div>`; 
-      };
+      window.genOptRow = function(uid, type, val='', checked='') { return `<div class="d-flex align-items-start mb-2 ans-row gap-2"><div class="mt-2"><input type="${type}" name="k_${uid}" class="form-check-input" ${checked}></div><div class="flex-grow-1"><textarea class="summernote-opt">${val}</textarea></div><button type="button" class="btn btn-outline-danger mt-1" onclick="window.removeOptRow(this)">X</button></div>`; };
       window.genPGKKRow = function(q='', k='B') { return `<tr><td><textarea class="summernote-opt pgkk-q">${q}</textarea></td><td><select class="form-select pgkk-k"><option value="B" ${k=='B'?'selected':''}>Benar</option><option value="S" ${k=='S'?'selected':''}>Salah</option></select></td><td><button type="button" class="btn btn-danger btn-sm" onclick="window.jQuery(this).closest('tr').remove()">X</button></td></tr>`; };
       window.genMatchRow = function(l='', r='') { return `<tr><td><textarea class="summernote-opt match-l">${l}</textarea></td><td><textarea class="summernote-opt match-r">${r}</textarea></td><td><button type="button" class="btn btn-danger btn-sm" onclick="window.jQuery(this).closest('tr').remove()">X</button></td></tr>`; };
 
@@ -1371,8 +1569,7 @@ export default function Page() {
               keys = form.find('textarea[name="essay_key"]').val().split(','); 
           } 
           
-          const payload = { id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID }; 
-          
+          const payload={id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID}; 
           const btn = form.find('button.btn-success');
           const origText = btn.html();
           btn.prop('disabled',true).html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...');
@@ -1381,7 +1578,8 @@ export default function Page() {
               btn.prop('disabled',false).html(origText);
               if(res.status==='success'){
                   window.toast('success','Soal Disimpan!');
-                  const newData={QID:res.id, Tipe:type, Pertanyaan:text, Options:JSON.stringify(opts), Key:JSON.stringify(keys), Skor:score, Nomor:num};
+                  // Simpan ke memory lokal (KeyAnswer digunakan db, Key untuk logic lama)
+                  const newData={QID:res.id, Tipe:type, Pertanyaan:text, Options:JSON.stringify(opts), KeyAnswer:JSON.stringify(keys), Key:JSON.stringify(keys), Skor:score, Nomor:num};
                   $('#block-'+uid).attr('data-q-obj', encodeURIComponent(JSON.stringify(newData))).find('input[name="id"]').val(res.id);
                   $('#block-'+uid+' .q-preview').html('Soal Tersimpan');
                   window.toggleEditQ(uid);
@@ -1483,14 +1681,17 @@ export default function Page() {
           return `<div style="font-family: 'Poppins', Arial, sans-serif; padding:25px; background:#f8fafc; border-radius:12px; color:#1e293b; border:1px solid #e2e8f0; margin-bottom:20px;"><div style="background:var(--primary); color:white; display:inline-block; padding:5px 15px; border-radius:15px; font-size:12px; font-weight:bold; margin-bottom:20px; box-shadow:0 2px 4px rgba(126,34,206,0.2);">Soal No. ${q.Nomor||''}</div><div style="margin-bottom:20px; font-size:16px; line-height:1.6; word-wrap: break-word;">${q.Pertanyaan}</div>${inp}</div>`;
       };
 
+      window.filterTable = function(tid, q) { const f=q.toLowerCase(); $(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); };
+
     };
 
     // =================================================================
-    // 9. INISIALISASI AUTO-LOGIN (MENUNGGU LIBRARY)
+    // 10. INISIALISASI AUTO-LOGIN (MENUNGGU LIBRARY)
     // =================================================================
     initApp();
 
     const checkAutoLogin = () => {
+    // Tunggu sampai fungsi UI native siap
     if (!window.showLoad) {
         setTimeout(checkAutoLogin, 100);
         return;
@@ -1520,6 +1721,7 @@ export default function Page() {
 
   }, [isMounted]);
 
+  // Layar Pemuatan Utama untuk Mengelabui Vercel Hydration
   if (!isMounted) return <div style={{ width: '100vw', height: '100vh', backgroundColor: '#f1f5f9' }}></div>;
 
  return (
