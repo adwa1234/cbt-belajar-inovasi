@@ -1342,13 +1342,10 @@ export default function Page() {
           
           $('#ans-area-'+uid+' .summernote-opt').each(function(){ $(this).summernote('destroy'); }); let h = '';
           
-          // PERBAIKAN PENTING: Extractor DOM Text Murni untuk mencocokkan string kunci dan opsi secara presisi 100%
-          const cleanStr = (s) => {
+          // PERBAIKAN: Jangan hapus tag HTML (karena bisa berupa gambar/rumus). Cukup normalisasi spasi.
+          const normalizeStr = (s) => {
               if(s === null || s === undefined) return '';
-              let div = document.createElement('div');
-              div.innerHTML = String(s);
-              let text = div.textContent || div.innerText || "";
-              return text.replace(/\s+/g, '').trim().toLowerCase();
+              return String(s).replace(/[\r\n\t]+/g, ' ').trim();
           };
 
           if (type === 'PGS' || type === 'PGK') { 
@@ -1356,7 +1353,7 @@ export default function Page() {
               h = `<button type="button" class="btn btn-outline-primary btn-sm mb-2" onclick="window.addOptRow('${uid}', '${inputType}')">+ Opsi</button><div id="opts-wrap-${uid}">`; 
               if(opts.length) {
                   opts.forEach(o => {
-                      let isChecked = keys.some(k => cleanStr(k) === cleanStr(o)) ? 'checked' : '';
+                      let isChecked = keys.some(k => normalizeStr(k) === normalizeStr(o)) ? 'checked' : '';
                       h += window.genOptRow(uid, inputType, o, isChecked);
                   });
               } else { h += window.genOptRow(uid, inputType); }
@@ -1372,7 +1369,7 @@ export default function Page() {
           } 
           document.getElementById('ans-area-'+uid).innerHTML = h; 
           
-          const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', tooltip: 'Rumus', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea idswal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((result) => { if (result.isConfirmed) { const mathText = document.getElementById('swal-math-input').value; if(mathText) context.invoke('editor.insertText', ` $$ ${mathText}$$ `); } }); } }).render(); };
+          const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', tooltip: 'Rumus', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((result) => { if (result.isConfirmed) { const mathText = document.getElementById('swal-math-input').value; if(mathText) context.invoke('editor.insertText', ` $$ ${mathText}$$ `); } }); } }).render(); };
           $('#ans-area-'+uid+' .summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); 
       };
 
