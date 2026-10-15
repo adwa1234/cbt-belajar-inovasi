@@ -509,20 +509,28 @@ export default function Page() {
 
 
       window.delExam = function(id) { 
-          window.Swal.fire({title:'Hapus Jadwal?', icon:'warning', showCancelButton:true, confirmButtonColor: '#d33'}).then(r=>{
+          window.Swal.fire({
+              title: 'Hapus Jadwal?', 
+              text: "Jadwal dan soal ujian di dalamnya akan dihapus.",
+              icon: 'warning', 
+              showCancelButton: true, 
+              confirmButtonColor: '#d33',
+              confirmButtonText: 'Ya, Hapus!'
+          }).then(r => {
               if(r.isConfirmed) { 
                   window.showLoad(true); 
-                  window.google.script.run.withSuccessHandler(()=>{
-                      window.showLoad(false); 
+                  window.google.script.run.withSuccessHandler(() => {
+                      window.showLoad(false); // PERBAIKAN: Mematikan loader!
+                      window.toast('success', 'Jadwal berhasil dihapus!');
                       window.loadPage('admin-ujian');
-                      window.toast('success', 'Jadwal Dihapus!');
                   }).withFailureHandler(err => { 
                       window.showLoad(false); 
-                      window.Swal.fire('Error', err.message, 'error')
+                      window.Swal.fire('Error', err.message, 'error');
                   }).adminDeleteExam(id, window.user.ID, window.user.Role); 
               } 
-          });
+          }); 
       };
+
 
       // =================================================================
       // 7. RENDER KONTEN DASHBOARD
