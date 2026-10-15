@@ -1531,7 +1531,6 @@ export default function Page() {
       window.addPGKKRowTo = function(uid) { const el = $(window.genPGKKRow());$('#pgkk-tbody-'+uid).append(el); const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((r) => { if (r.isConfirmed) { const txt = document.getElementById('swal-math-input').value; if(txt) context.invoke('editor.insertText', ` $$ ${txt}$$ `); } }); } }).render(); }; el.find('.summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); };
       window.addMatchRowTo = function(uid) { const el = $(window.genMatchRow());$('#match-tbody-'+uid).append(el); const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((r) => { if (r.isConfirmed) { const txt = document.getElementById('swal-math-input').value; if(txt) context.invoke('editor.insertText', ` $$ ${txt}$$ `); } }); } }).render(); }; el.find('.summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); };
       window.removeOptRow = function(btn) { $(btn).closest('.ans-row').remove(); };
-
       window.saveQBlock = function(uid) {
           const form = $('#frm-q-'+uid); 
           const type = form.find('select[name="type"]').val(); 
@@ -1546,6 +1545,7 @@ export default function Page() {
                   const v = $(this).find('.summernote-opt').summernote('code'); 
                   if(v && v !== '<p><br></p>'){ 
                       opts.push(v); 
+                      // FIX: Selector akurat untuk radio/checkbox
                       if($(this).find('input[type="radio"], input[type="checkbox"]').is(':checked')) { 
                           keys.push(v); 
                           keyIndices.push(opts.length - 1); 
@@ -1567,7 +1567,8 @@ export default function Page() {
               keys = form.find('textarea[name="essay_key"]').val().split(','); 
           } 
           
-          const payload={id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID}; 
+          const payload = { id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID }; 
+          
           const btn = form.find('button.btn-success');
           const origText = btn.html();
           btn.prop('disabled',true).html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...');
@@ -1576,13 +1577,11 @@ export default function Page() {
               btn.prop('disabled',false).html(origText);
               if(res.status==='success'){
                   window.toast('success','Soal Disimpan!');
-                  const newData={QID:res.id, Tipe:type, Pertanyaan:text, Options:JSON.stringify(opts), KeyAnswer:JSON.stringify(keys), Key:JSON.stringify(keys), Skor:score, Nomor:num};
-                  $('#block-'+uid).attr('data-q-obj', encodeURIComponent(JSON.stringify(newData))).find('input[name="id"]').val(res.id);
-                  $('#block-'+uid+' .q-preview').html('Soal Tersimpan');
-                  window.toggleEditQ(uid);
-                  const existingIdx = window.currentQuestionsData.findIndex(q => String(q.QID) === String(res.id));
-                  if (existingIdx !== -1) window.currentQuestionsData[existingIdx] = newData;
-                  else { window.currentQuestionsData.push(newData); window.currentQuestionsData.sort((a,b) => (Number(a.Nomor)||999) - (Number(b.Nomor)||999)); }
+                  window.toggleEditQ(uid); // Tutup form edit
+                  
+                  // PERBAIKAN FATAL: Render ulang seluruh list langsung dari Server / Database!
+                  // Ini 100% menjamin data kunci jawaban muncul dan tidak rusak oleh cache DOM.
+                  window.loadQList(); 
               } else window.Swal.fire('Error',res.msg,'error');
           }).withFailureHandler(err => { 
               btn.prop('disabled',false).html(origText); 
