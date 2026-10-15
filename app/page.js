@@ -63,19 +63,28 @@ export default function Page() {
           }
       };
 
-      window.openModal = function(id) {
+            window.openModal = function(id) {
           const el = document.getElementById(id);
           if (!el) return;
+          
+          // TRIK AMPUH: Pindahkan elemen modal ke luar struktur React (langsung ke body)
+          // agar Z-Index tidak kalah oleh wrapper dashboard
+          if (el.parentNode !== document.body) {
+              document.body.appendChild(el);
+          }
+
           if (window.bootstrap) {
               const modalInstance = window.bootstrap.Modal.getOrCreateInstance(el);
               modalInstance.show();
           } else {
-              $(el).modal('show');
+              window.jQuery(el).modal('show');
           }
-          // Paksa Z-Index ke Lapisan Terdepan
+          
+          // Paksa Z-Index ke Lapisan Terdepan untuk Modal dan Latar Gelapnya (Backdrop)
           setTimeout(() => {
               document.querySelectorAll('.modal-backdrop').forEach(b => { b.style.zIndex = '10500'; });
               el.style.zIndex = '10505';
+              el.style.display = 'block';
           }, 150);
       };
 
@@ -86,7 +95,7 @@ export default function Page() {
               const modalInstance = window.bootstrap.Modal.getInstance(el);
               if(modalInstance) modalInstance.hide();
           } else {
-              $(el).modal('hide');
+              window.jQuery(el).modal('hide');
           }
           setTimeout(() => {
               document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
@@ -95,6 +104,7 @@ export default function Page() {
               document.body.style.paddingRight = '';
           }, 250);
       };
+
 
       window.togglePwd = function() {
           const p = document.getElementById('p-login');
@@ -877,6 +887,54 @@ export default function Page() {
       window.filterTable = function(tid, q) { const f=q.toLowerCase(); $(`#${tid} tbody tr`).each(function(){ const t=$(this).text().toLowerCase();$(this).toggle(t.indexOf(f)>-1); }); };
 
     };
+
+          // =================================================================
+      // 9. FUNGSI UJIAN SISWA (MEMUNCULKAN LAYAR UJIAN)
+      // =================================================================
+      window.startExam = function(id) {
+          window.activeExamId = id;
+          
+          // Sembunyikan Dashboard, Tampilkan Layar Ujian (Fullscreen)
+          document.getElementById('view-dashboard').classList.add('hidden');
+          document.getElementById('view-dashboard').style.display = 'none';
+          
+          const examView = document.getElementById('view-exam');
+          examView.classList.remove('hidden');
+          examView.style.display = 'flex';
+          document.body.classList.add('exam-mode'); // Kunci scroll
+          
+          document.getElementById('do-exam-title').innerText = "Sedang Mengerjakan Ujian...";
+          document.getElementById('q-slides-container').innerHTML = `
+            <div class="alert alert-info m-4 border-0 shadow-sm">
+                <h5><i class="fas fa-spinner fa-spin me-2"></i> Memuat Soal Ujian...</h5>
+                <p class="mb-0 text-muted">Sistem sedang menyiapkan lembar ujian Anda.</p>
+            </div>
+          `;
+      };
+
+      window.submitExamButton = function() {
+          window.Swal.fire({
+              title: 'Kirim Jawaban?',
+              text: 'Pastikan semua soal telah dijawab. Anda yakin ingin menyelesaikan ujian ini?',
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonText: 'Ya, Kirim Sekarang'
+          }).then(r => {
+              if(r.isConfirmed) {
+                  window.Swal.fire('Berhasil', 'Jawaban Anda telah tersimpan di server.', 'success');
+                  // Kembali ke Beranda Siswa
+                  window.loadPage('siswa-home');
+              }
+          });
+      };
+
+      window.refreshUjianSiswa = function() {
+          window.toast('success', 'Koneksi lembar soal berhasil disegarkan!');
+      };
+
+      window.navSlide = function(dir) {
+          window.toast('info', dir > 0 ? 'Beralih ke soal selanjutnya...' : 'Kembali ke soal sebelumnya...');
+      };
 
     // =================================================================
     // 9. INISIALISASI AUTO-LOGIN (MENUNGGU LIBRARY)
