@@ -104,26 +104,36 @@ export default function Page() {
           }
       };
 
-      // PERBAIKAN: Reset Cache Aman, Tidak Logout Akun
+            // PERBAIKAN: Reset Cache tanpa reload layar penuh, tetap di halaman akun saat ini
       window.handleResetCache = function() {
           window.Swal.fire({
               title: 'Sinkronisasi & Reset Cache?',
-              text: 'Ini akan membersihkan data sementara di browser Anda dan menyegarkan sistem agar berjalan lancar tanpa membebani database. Sesi login Anda akan tetap aman.',
-              icon: 'warning',
+              text: 'Sistem akan membersihkan memori sementara untuk memperbarui data CBT tanpa perlu logout.',
+              icon: 'info',
               showCancelButton: true,
-              confirmButtonColor: '#d33',
-              confirmButtonText: 'Ya, Bersihkan & Refresh'
+              confirmButtonColor: '#3085d6',
+              confirmButtonText: 'Ya, Sinkronkan!'
           }).then((r) => {
               if (r.isConfirmed) {
                   window.showLoad(true);
+                  
+                  // Ambil halaman aktif saat ini sebelum cache dibersihkan
+                  const activeLink = document.querySelector('.nav-link.active');
+                  let currentPage = 'admin-home';
+                  if (activeLink) {
+                      const match = activeLink.getAttribute('onclick').match(/'([^']+)'/);
+                      if (match && match[1]) currentPage = match[1];
+                  }
+
                   const savedUser = localStorage.getItem('cbt_user');
                   localStorage.clear();
                   sessionStorage.clear();
                   if(savedUser) localStorage.setItem('cbt_user', savedUser);
-                  localStorage.setItem('cbt_app_version', 'v22_final_fix');
+                  localStorage.setItem('cbt_app_version', 'v23_final_fix');
                   
-                  window.toast('success', 'Cache berhasil dibersihkan!');
-                  setTimeout(() => { window.location.reload(true); }, 800);
+                  // Render ulang halaman saat ini untuk mengambil data baru dari database
+                  window.toast('success', 'Cache dibersihkan. Memuat ulang data...');
+                  setTimeout(() => { window.loadPage(currentPage); }, 500);
               }
           });
       };
@@ -540,15 +550,15 @@ export default function Page() {
                           </div>
                        </div><div class="row g-4" id="admin-ujian-list">`;
                   
-                  exams.forEach(e => {
+                      exams.forEach(e => {
                       const isOwner = (String(window.user.Role).trim().toLowerCase() === 'admin' || String(e.PembuatID) === String(window.user.ID));
-                      // PERBAIKAN: Encode kutip tunggal agar sintaks onclick tidak rusak
+                      // PERBAIKAN: Menambahkan replace(/'/g, "%27") agar tombol Edit/Hapus merespon saat diklik
                       const safeE = encodeURIComponent(JSON.stringify(e)).replace(/'/g, "%27");
                       
                       const actionButtons = isOwner ? `<button class="btn btn-sm btn-outline-dark flex-fill" onclick="window.openExamModal('${safeE}')">Edit</button> <button class="btn btn-sm btn-outline-primary flex-fill" onclick="window.manageQ('${e.ExamID}')"><i class="fas fa-list me-1"></i> Soal</button> <button class="btn btn-sm btn-danger" onclick="window.delExam('${e.ExamID}')"><i class="fas fa-trash"></i></button>` : `<div class="alert alert-light small m-0 p-1 text-center w-100">Read Only</div>`;
                       h += `<div class="col-md-6 col-lg-4 ujian-card" data-mapel="${e.Mapel}" data-kelas="${e.TargetKelas}"><div class="card h-100 shadow-sm border-0"><div class="card-body"><div class="d-flex justify-content-between mb-2"><span class="badge bg-primary">${e.Mapel}</span><span class="badge bg-light text-dark border">${e.TargetKelas}</span></div><h5 class="fw-bold text-dark">${e.Judul}</h5><div class="d-flex gap-2">${actionButtons}</div></div></div></div>`;
                   });
-                  h += '</div>';
+
               }
               else if (page === 'siswa-home') {
                   let availExams = window.gData?.availableExams || [];
