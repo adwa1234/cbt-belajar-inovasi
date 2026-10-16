@@ -226,7 +226,7 @@ export async function POST(req) {
 
         return sendRes({ status: "success", data: questions, duration: eData.Durasi, judul: eData.Judul, token: eData.Token, maxViolations: eData.MaxViolations });
     }
-        else if (action === "submitExam") {
+    else if (action === "submitExam") {
         const [uid, eid, ansArr, violations] = args;
         const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [eid] });
         let totalScore = 0; let maxScore = 0; let detailLog = [];
@@ -241,15 +241,16 @@ export async function POST(req) {
             const userAns = amanAnsArr.find(a => String(a.qid) === String(q.QID));
             const ansVal = userAns ? userAns.answer : '';
             
-            // Parsing Kunci Jawaban
+            // PERBAIKAN: Jika KeyAnswer adalah teks biasa peninggalan lama (bukan JSON), amankan ke dalam array
             let rawKeys = q.KeyAnswer || q.Key || "[]";
             let keyArr = [];
             try { 
                 let parsed = JSON.parse(rawKeys);
                 keyArr = Array.isArray(parsed) ? parsed : [parsed];
-            } catch(e) { keyArr = []; }
+            } catch(e) { 
+                keyArr = [rawKeys]; // Paksa menjadi array jika gagal di-parse
+            }
 
-            // Parsing Opsi (Untuk mendeteksi jika siswa mencentang semua pilihan)
             let optsArr = [];
             try {
                 optsArr = JSON.parse(q.Options || "[]");
@@ -258,9 +259,6 @@ export async function POST(req) {
             const skorItem = Number(q.Skor || 10);
             let earned = 0;
 
-            // ==============================================================
-            // LOGIKA PENILAIAN PARSIAL & PENALTI
-            // ==============================================================
             if (q.Tipe === 'PGS') {
                 if (normalizeStr(ansVal) === normalizeStr(keyArr[0])) earned = skorItem;
             } 
@@ -269,29 +267,22 @@ export async function POST(req) {
                 const cleanAns = amanAnsVal.map(normalizeStr);
                 const cleanKey = keyArr.map(normalizeStr);
                 
-                // 1. Hitung jumlah centang yang BENAR
                 let correctSelected = cleanAns.filter(ans => cleanKey.includes(ans)).length;
-                // 2. Hitung jumlah centang yang SALAH (Jawaban mengecoh)
                 let wrongSelected = cleanAns.filter(ans => !cleanKey.includes(ans)).length;
 
-                // 3. Kalkulasi Nilai Parsial: (Benar - Salah) / Total Kunci * Skor
                 if (cleanKey.length > 0) {
                     earned = ((correctSelected - wrongSelected) / cleanKey.length) * skorItem;
                 }
 
-                // 4. PENALTI MUTLAK: Jika siswa mencentang SEMUA opsi (dan kunci aslinya tidak semua benar)
                 if (optsArr.length > 0 && cleanAns.length === optsArr.length && cleanKey.length < optsArr.length) {
                     earned = 0; 
                 }
-
-                // Cegah nilai minus untuk 1 soal jika terlalu banyak salah centang
                 if (earned < 0) earned = 0;
             } 
             else if (q.Tipe === 'PGKK' || q.Tipe === 'Menjodohkan') {
                 let correctCount = 0;
                 const amanAnsVal = Array.isArray(ansVal) ? ansVal : [];
                 
-                // Kalkulasi Parsial Murni: Dihitung per baris/pasangan
                 keyArr.forEach((k, idx) => { 
                     if (amanAnsVal[idx] !== undefined && normalizeStr(amanAnsVal[idx]) === normalizeStr(k)) {
                         correctCount++;
