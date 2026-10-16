@@ -1225,13 +1225,30 @@ window.openKoreksi = function(rid) {
       window.handleWindowBlur = function() { if (!window.isExamFinished) window.triggerViolation("Anda meninggalkan halaman ujian!"); };
       window.handleFullscreenChange = function() { if (!window.isExamFinished && !document.fullscreenElement) { window.triggerViolation("Anda keluar dari mode fullscreen!"); try{document.documentElement.requestFullscreen().catch(()=>{});}catch(e){} } };
 
-      window.triggerViolation = function(msg) {
+            window.triggerViolation = function(msg) {
           if(window.violationLock || window.isExamFinished) return;
           window.violationLock = true; window.violationCount++; 
           
           if (window.violationCount >= window.activeExamViolations) {
+              // 1. Nyalakan alarm panjang
               window.playBeep(0, true);
-              window.isExamFinished = true; window.submitExamButton(true); 
+              window.isExamFinished = true; 
+              
+              // 2. Beri peringatan terakhir kepada siswa sebelum force submit
+              window.Swal.fire({
+                  icon: 'error',
+                  title: 'UJIAN DIHENTIKAN!',
+                  text: 'Anda telah mencapai batas maksimal pelanggaran. Jawaban Anda sedang dikirim otomatis ke server.',
+                  showConfirmButton: false,
+                  allowOutsideClick: false,
+                  allowEscapeKey: false
+              });
+
+              // 3. Eksekusi pengiriman jawaban setelah jeda 2 detik agar audio terdengar
+              setTimeout(() => {
+                  window.processSubmission();
+              }, 2000);
+
           } else {
               window.playBeep(window.violationCount, false);
               window.Swal.fire({ icon: 'warning', title: 'PERINGATAN PELANGGARAN!', text: `${msg} (${window.violationCount}/${window.activeExamViolations})`, confirmButtonText: 'KEMBALI KE UJIAN', allowOutsideClick: false
