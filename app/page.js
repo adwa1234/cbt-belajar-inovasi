@@ -1356,19 +1356,49 @@ window.openKoreksi = function(rid) {
               clearInterval(window.timerInt); clearInterval(window.monitorInterval); clearInterval(window.autosaveInterval);
               window.isExamFinished = true; window.disableSecurity(); window.stopContinuousBeep();
           }
+          
           let ans = [];
+          
+          // ==============================================================
+          // PERBAIKAN: Menjamin tipe data sesuai sebelum dikirim
+          // ==============================================================
           $('.q-slide').each(function(idx) {
-              const qid = $(this).data('qid'); const t = $(this).data('type'); let v = null;
-              if (t.includes('PG') && t !== 'PGKK') {
-                  if (t === 'PGK') { v = []; $(this).find('input:checked').each(function() { v.push(decodeURIComponent($(this).val())) }); }
-                  else { const checked = $(this).find('input:checked').val(); if(checked) v = decodeURIComponent(checked); }
+              const qid = $(this).data('qid'); 
+              const t = $(this).data('type'); 
+              let v = null;
+              
+              if (t === 'PGS') {
+                  const checked = $(this).find('input[type="radio"]:checked').val(); 
+                  if(checked) v = decodeURIComponent(checked);
               }
-              else if (t === 'PGKK') { v = []; $(this).find('tbody tr').each(function(x) { v.push($(this).find('input:checked').val() || null) }); }
-              else if (t === 'Menjodohkan') { const raw = $(`#ans-in-${idx}`).val(); v = raw ? JSON.parse(raw) : []; }
-              else { v = $(this).find('textarea').val(); }
-              if (v !== null && v !== undefined) ans.push({ qid: qid, answer: v });
+              else if (t === 'PGK') {
+                  v = []; 
+                  $(this).find('input[type="checkbox"]:checked').each(function() { 
+                      v.push(decodeURIComponent($(this).val())); 
+                  });
+              }
+              else if (t === 'PGKK') {
+                  v = []; 
+                  $(this).find('tbody tr').each(function(x) { 
+                      const val = $(this).find(`input[name="ans-${qid}-${x}"]:checked`).val();
+                      v.push(val || null); 
+                  });
+              }
+              else if (t === 'Menjodohkan') {
+                  const raw = $(`#ans-in-${idx}`).val(); 
+                  v = raw ? JSON.parse(raw) : []; 
+              }
+              else if (t === 'Uraian') {
+                  v = $(this).find('textarea').val() || '';
+              }
+
+              // Pastikan v tidak null/undefined sebelum di-push, atau biarkan format kosong yang aman
+              ans.push({ qid: String(qid), answer: v });
           });
           
+          // Debugging log (bisa dihapus nanti): memastikan data ans valid berbentuk array
+          console.log("Mengirim jawaban:", ans);
+
           window.google.script.run.withSuccessHandler((res) => {
               window.examSubmitting = false; btn.prop('disabled', false).html('<i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN');
               if (res.status === 'success') {
@@ -1387,10 +1417,10 @@ window.openKoreksi = function(rid) {
               } else { window.Swal.fire('Gagal', res.msg, 'error'); }
           }).withFailureHandler((err) => {
               if (retryCount < 3) { setTimeout(() => window.processSubmission(retryCount + 1), 3000); } 
-              else { window.examSubmitting = false; btn.prop('disabled', false); window.Swal.fire('Error', 'Gagal menghubungi server.', 'error'); }
+              else { window.examSubmitting = false; btn.prop('disabled', false).html('<i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN'); window.Swal.fire('Error', 'Gagal menghubungi server. Pastikan koneksi internet stabil.', 'error'); }
           }).submitExam(window.user.ID, window.activeExamId, ans, window.violationCount);
       };
-
+      
       window.matchClick = function(qIdx, side, itemIdx, el) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; const st = window.matchState[qIdx]; $(`#match-area-${qIdx} .match-${side}`).removeClass('selected'); $(el).addClass('selected'); if(side === 'l') { st.sel = { idx: itemIdx, el: el }; } else { if(st.sel) { st.pairs = st.pairs.filter(p => p.left !== st.sel.idx); st.pairs.push({ left: st.sel.idx, right: itemIdx, rightVal: decodeURIComponent($(el).data('val')) }); window.drawLines(qIdx); window.markAns(qIdx); st.sel = null; $(`#match-area-${qIdx} .match-item`).removeClass('selected'); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); } } };
       window.drawLines = function(qIdx) { if(!window.matchState[qIdx]) return; const svg = document.getElementById(`svg-${qIdx}`); const container = document.getElementById(`match-area-${qIdx}`); if(!container || !svg) return; const rectC = container.getBoundingClientRect(); let html = ''; let answerArr = []; const leftCount = $(`#col-l-${qIdx}`).children().length; for(let k=0; k<leftCount; k++) answerArr[k] = null; $(`#match-area-${qIdx} .match-item`).removeClass('matched'); window.matchState[qIdx].pairs.forEach(p => { const elL = $(`#col-l-${qIdx}`).children().eq(p.left)[0]; const elR = $(`#col-r-${qIdx}`).children().eq(p.right)[0]; if(elL && elR) { const rL = elL.getBoundingClientRect(); const rR = elR.getBoundingClientRect(); const x1 = rL.right - rectC.left; const y1 = (rL.top + rL.height/2) - rectC.top; const x2 = rR.left - rectC.left; const y2 = (rR.top + rR.height/2) - rectC.top; html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#10b981" stroke-width="3" />`; $(elL).addClass('matched'); $(elR).addClass('matched'); answerArr[p.left] = p.rightVal; } }); svg.innerHTML = html; $(`#ans-in-${qIdx}`).val(JSON.stringify(answerArr)); };
       window.resetMatch = function(qIdx) { window.matchState[qIdx] = { sel: null, pairs: [] }; document.getElementById(`svg-${qIdx}`).innerHTML = ''; $(`#match-area-${qIdx} .match-item`).removeClass('matched selected'); $(`#ans-in-${qIdx}`).val(''); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); };
