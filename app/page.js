@@ -1576,23 +1576,29 @@ window.genOptRow = function(uid, type, val='', checked='') {
               keys = Array.isArray(parsed) ? parsed : [parsed];
           } catch(e) { keys = []; }
           
-          $('#ans-area-'+uid+' .summernote-opt').each(function(){ $(this).summernote('destroy'); }); let h = '';
+          $('#ans-area-'+uid+' .summernote-opt').each(function(){ $(this).summernote('destroy'); }); 
+          let h = '';
           
-          // PERBAIKAN: Jangan hapus tag HTML (karena bisa berupa gambar/rumus). Cukup normalisasi spasi.
           const normalizeStr = (s) => {
               if(s === null || s === undefined) return '';
               return String(s).replace(/[\r\n\t]+/g, ' ').trim();
           };
 
+          let checkedIndices = []; // Array penyimpan target yang akan di-force checked
+
           if (type === 'PGS' || type === 'PGK') { 
               const inputType = type === 'PGS' ? 'radio' : 'checkbox';
               h = `<button type="button" class="btn btn-outline-primary btn-sm mb-2" onclick="window.addOptRow('${uid}', '${inputType}')">+ Opsi</button><div id="opts-wrap-${uid}">`; 
               if(opts.length) {
-                  opts.forEach(o => {
-                      let isChecked = keys.some(k => normalizeStr(k) === normalizeStr(o)) ? 'checked' : '';
-                      h += window.genOptRow(uid, inputType, o, isChecked);
+                  opts.forEach((o, idx) => {
+                      let isMatch = keys.some(k => normalizeStr(k) === normalizeStr(o));
+                      let isChecked = isMatch ? 'checked' : '';
+                      if (isMatch) checkedIndices.push(idx); // Simpan index
+                      h += window.genOptRow(uid, inputType, o, isChecked, idx);
                   });
-              } else { h += window.genOptRow(uid, inputType); }
+              } else { 
+                  h += window.genOptRow(uid, inputType, '', '', 0); 
+              }
               h += '</div>'; 
           } else if (type === 'PGKK') { 
               h = `<table class="table table-sm"><thead><tr><th>Pernyataan</th><th>Kunci</th><th>X</th></tr></thead><tbody id="pgkk-tbody-${uid}">`; 
@@ -1603,8 +1609,23 @@ window.genOptRow = function(uid, type, val='', checked='') {
           } else if (type === 'Uraian') { 
               h = `<textarea class="form-control" name="essay_key" placeholder="Kata kunci penilaian (dipisah koma)">${keys.join(',')}</textarea>`; 
           } 
+          
           document.getElementById('ans-area-'+uid).innerHTML = h; 
           
+          // =================================================================
+          // FIX BROWSER CACHE: Paksa status checked via Javascript
+          // Ini akan mencegah browser melakukan salah check pada radio button
+          // =================================================================
+          if (type === 'PGS' || type === 'PGK') {
+              // 1. Matikan semua checklist terlebih dahulu (Reset)
+              $(`#opts-wrap-${uid} .opt-radio-checkbox`).prop('checked', false);
+              
+              // 2. Hidupkan (centang) hanya pada opsi yang datanya persis dengan database
+              checkedIndices.forEach(idx => {
+                  $(`#opts-wrap-${uid} .ans-row`).eq(idx).find('.opt-radio-checkbox').prop('checked', true);
+              });
+          }
+
           const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', tooltip: 'Rumus', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((result) => { if (result.isConfirmed) { const mathText = document.getElementById('swal-math-input').value; if(mathText) context.invoke('editor.insertText', ` $$ ${mathText}$$ `); } }); } }).render(); };
           $('#ans-area-'+uid+' .summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); 
       };
@@ -1666,8 +1687,30 @@ window.saveKoreksi = async function() {
       window.genOptRow = function(uid, type, val='', checked='') { return `<div class="d-flex align-items-start mb-2 ans-row gap-2"><div class="mt-2"><input type="${type}" name="k_${uid}" class="form-check-input" ${checked}></div><div class="flex-grow-1"><textarea class="summernote-opt">${val}</textarea></div><button type="button" class="btn btn-outline-danger mt-1" onclick="window.removeOptRow(this)">X</button></div>`; };
       window.genPGKKRow = function(q='', k='B') { return `<tr><td><textarea class="summernote-opt pgkk-q">${q}</textarea></td><td><select class="form-select pgkk-k"><option value="B" ${k=='B'?'selected':''}>Benar</option><option value="S" ${k=='S'?'selected':''}>Salah</option></select></td><td><button type="button" class="btn btn-danger btn-sm" onclick="window.jQuery(this).closest('tr').remove()">X</button></td></tr>`; };
       window.genMatchRow = function(l='', r='') { return `<tr><td><textarea class="summernote-opt match-l">${l}</textarea></td><td><textarea class="summernote-opt match-r">${r}</textarea></td><td><button type="button" class="btn btn-danger btn-sm" onclick="window.jQuery(this).closest('tr').remove()">X</button></td></tr>`; };
-
-      window.addOptRow = function(uid, t) { const el = $(window.genOptRow(uid, t));$('#opts-wrap-'+uid).append(el); const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((r) => { if (r.isConfirmed) { const txt = document.getElementById('swal-math-input').value; if(txt) context.invoke('editor.insertText', ` $$ ${txt}$$ `); } }); } }).render(); }; el.find('.summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); };
+window.addOptRow = function(uid, t) { 
+          const idx = $('#opts-wrap-'+uid+' .ans-row').length;
+          const el = $(window.genOptRow(uid, t, '', '', idx));$('#opts-wrap-'+uid).append(el); 
+          
+          const MathButtonSm = function (context) { 
+              const ui = $.summernote.ui; 
+              return ui.button({ 
+                  contents: '<i class="fas fa-square-root-alt"></i>', 
+                  click: function () { 
+                      window.Swal.fire({ 
+                          title: 'LaTeX', 
+                          html: `<textarea id="swal-math-input" class="form-control"></textarea>`, 
+                          showCancelButton: true 
+                      }).then((r) => { 
+                          if (r.isConfirmed) { 
+                              const txt = document.getElementById('swal-math-input').value; 
+                              if(txt) context.invoke('editor.insertText', ` $$ ${txt}$$ `); 
+                          } 
+                      }); 
+                  } 
+              }).render(); 
+          }; 
+          el.find('.summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); 
+      };
       window.addPGKKRowTo = function(uid) { const el = $(window.genPGKKRow());$('#pgkk-tbody-'+uid).append(el); const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((r) => { if (r.isConfirmed) { const txt = document.getElementById('swal-math-input').value; if(txt) context.invoke('editor.insertText', ` $$ ${txt}$$ `); } }); } }).render(); }; el.find('.summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); };
       window.addMatchRowTo = function(uid) { const el = $(window.genMatchRow());$('#match-tbody-'+uid).append(el); const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((r) => { if (r.isConfirmed) { const txt = document.getElementById('swal-math-input').value; if(txt) context.invoke('editor.insertText', ` $$ ${txt}$$ `); } }); } }).render(); }; el.find('.summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); };
       window.removeOptRow = function(btn) { $(btn).closest('.ans-row').remove(); };
