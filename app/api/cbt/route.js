@@ -231,17 +231,17 @@ export async function POST(req) {
         const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [eid] });
         let totalScore = 0; let maxScore = 0; let detailLog = [];
 
-        // Normalisasi HANYA untuk komparasi saat menilai
         const normalizeStr = (s) => {
             if (s === null || s === undefined) return '';
             return String(s).replace(/[\r\n\t]+/g, ' ').trim();
         };
 
         qRes.rows.forEach(q => {
-            const userAns = ansArr.find(a => String(a.qid) === String(q.QID));
+            // Pastikan ansArr adalah array sebelum mencoba find()
+            const amanAnsArr = Array.isArray(ansArr) ? ansArr : [];
+            const userAns = amanAnsArr.find(a => String(a.qid) === String(q.QID));
             const ansVal = userAns ? userAns.answer : '';
             
-            // Parsing KeyAnswer dengan aman
             let rawKeys = q.KeyAnswer || q.Key || "[]";
             let keyArr = [];
             try { 
@@ -252,38 +252,41 @@ export async function POST(req) {
             const skorItem = Number(q.Skor || 10);
             let earned = 0;
 
-            // Logika Penilaian Tepat Sasaran
+            // ==============================================================
+            // PERBAIKAN: Keamanan Komparasi Array
+            // ==============================================================
             if (q.Tipe === 'PGS') {
                 if (normalizeStr(ansVal) === normalizeStr(keyArr[0])) earned = skorItem;
             } 
             else if (q.Tipe === 'PGK') {
-                if (Array.isArray(ansVal)) {
-                    const cleanAns = ansVal.map(normalizeStr).sort();
-                    const cleanKey = keyArr.map(normalizeStr).sort();
-                    if (JSON.stringify(cleanAns) === JSON.stringify(cleanKey)) earned = skorItem;
-                }
+                // Pastikan ansVal dan keyArr adalah Array sebelum memanggil sort()
+                const amanAnsVal = Array.isArray(ansVal) ? ansVal : (ansVal ? [ansVal] : []);
+                const cleanAns = amanAnsVal.map(normalizeStr).sort();
+                const cleanKey = keyArr.map(normalizeStr).sort();
+                if (JSON.stringify(cleanAns) === JSON.stringify(cleanKey)) earned = skorItem;
             } 
             else if (q.Tipe === 'PGKK' || q.Tipe === 'Menjodohkan') {
                 let correctCount = 0;
+                // Pastikan ansVal bisa dibaca by index
+                const amanAnsVal = Array.isArray(ansVal) ? ansVal : [];
+                
                 keyArr.forEach((k, idx) => { 
-                    if (ansVal && Array.isArray(ansVal) && normalizeStr(ansVal[idx]) === normalizeStr(k)) {
+                    if (amanAnsVal[idx] !== undefined && normalizeStr(amanAnsVal[idx]) === normalizeStr(k)) {
                         correctCount++;
                     }
                 });
                 earned = keyArr.length > 0 ? (correctCount / keyArr.length) * skorItem : 0;
             } 
             else if (q.Tipe === 'Uraian') {
-                earned = 0; // Uraian dikoreksi manual
+                earned = 0; 
             }
 
             maxScore += skorItem;
             totalScore += earned;
             
-            // NOTE: ansVal akan tersimpan ASLI 100% tanpa di-trim untuk log
             detailLog.push({ i: q.Nomor, s: Number(earned.toFixed(2)), m: skorItem, t: q.Tipe, a: ansVal });
         });
 
-        // Kalkulasi ke skala 100
         const finalScore = maxScore > 0 ? Number(((totalScore / maxScore) * 100).toFixed(2)) : 0;
         const rid = 'RES' + Date.now() + Math.floor(Math.random() * 1000);
         
