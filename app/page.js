@@ -1441,7 +1441,16 @@ window.openKoreksi = function(rid) {
               window.Swal.fire('Error', err.message, 'error');
           }
       };
-
+window.genOptRow = function(uid, type, val='', checked='') { 
+          return `<div class="d-flex align-items-start mb-2 ans-row gap-2">
+                      <div class="mt-2">
+                          <input type="${type}" name="k_${uid}" class="form-check-input opt-radio-checkbox" ${checked}>
+                      </div>
+                      <div class="flex-grow-1"><textarea class="summernote-opt">${val}</textarea></div>
+                      <button type="button" class="btn btn-outline-danger mt-1" onclick="window.removeOptRow(this)">X</button>
+                  </div>`; 
+      };
+      
       window.saveQBlock = async function(uid) {
           const form = $('#frm-q-'+uid); 
           const type = form.find('select[name="type"]').val(); 
@@ -1456,8 +1465,10 @@ window.openKoreksi = function(rid) {
                   const v = $(this).find('.summernote-opt').summernote('code'); 
                   if(v && v !== '<p><br></p>'){ 
                       opts.push(v); 
-                      if($(this).find('input[type="radio"], input[type="checkbox"]').is(':checked')) { 
-                          keys.push(v); keyIndices.push(opts.length - 1); 
+                      // FIX UTAMA: Gunakan selector class spesifik agar tidak bocor ke checkbox Summernote
+                      if($(this).find('.opt-radio-checkbox').is(':checked')) { 
+                          keys.push(v); 
+                          keyIndices.push(opts.length - 1); 
                       } 
                   } 
               });
