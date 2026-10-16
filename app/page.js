@@ -1427,45 +1427,45 @@ window.openKoreksi = function(rid) {
           
           let ans = [];
           
-          // ==============================================================
-          // PERBAIKAN: Menjamin tipe data sesuai sebelum dikirim
-          // ==============================================================
-          $('.q-slide').each(function(idx) {
-              const qid = $(this).data('qid'); 
-              const t = $(this).data('type'); 
-              let v = null;
-              
-              if (t === 'PGS') {
-                  const checked = $(this).find('input[type="radio"]:checked').val(); 
-                  if(checked) v = decodeURIComponent(checked);
-              }
-              else if (t === 'PGK') {
-                  v = []; 
-                  $(this).find('input[type="checkbox"]:checked').each(function() { 
-                      v.push(decodeURIComponent($(this).val())); 
-                  });
-              }
-              else if (t === 'PGKK') {
-                  v = []; 
-                  $(this).find('tbody tr').each(function(x) { 
-                      const val = $(this).find(`input[name="ans-${qid}-${x}"]:checked`).val();
-                      v.push(val || null); 
-                  });
-              }
-              else if (t === 'Menjodohkan') {
-                  const raw = $(`#ans-in-${idx}`).val(); 
-                  v = raw ? JSON.parse(raw) : []; 
-              }
-              else if (t === 'Uraian') {
-                  v = $(this).find('textarea').val() || '';
-              }
+          try {
+              $('.q-slide').each(function(idx) {
+                  const qid = $(this).data('qid'); 
+                  const t = $(this).data('type'); 
+                  let v = null;
+                  
+                  if (t === 'PGS') {
+                      const checked = $(this).find('input[type="radio"]:checked').val(); 
+                      if(checked) v = decodeURIComponent(checked);
+                  }
+                  else if (t === 'PGK') {
+                      v = []; 
+                      $(this).find('input[type="checkbox"]:checked').each(function() { 
+                          v.push(decodeURIComponent($(this).val())); 
+                      });
+                  }
+                  else if (t === 'PGKK') {
+                      v = []; 
+                      $(this).find('tbody tr').each(function(x) { 
+                          const val = $(this).find(`input[name="ans-${qid}-${x}"]:checked`).val();
+                          v.push(val || null); 
+                      });
+                  }
+                  else if (t === 'Menjodohkan') {
+                      const raw = $(`#ans-in-${idx}`).val(); 
+                      v = raw ? JSON.parse(raw) : []; 
+                  }
+                  else if (t === 'Uraian') {
+                      v = $(this).find('textarea').val() || '';
+                  }
 
-              // Pastikan v tidak null/undefined sebelum di-push, atau biarkan format kosong yang aman
-              ans.push({ qid: String(qid), answer: v });
-          });
-          
-          // Debugging log (bisa dihapus nanti): memastikan data ans valid berbentuk array
-          console.log("Mengirim jawaban:", ans);
+                  ans.push({ qid: String(qid), answer: v });
+              });
+          } catch (e) {
+              window.examSubmitting = false; 
+              btn.prop('disabled', false).html('<i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN');
+              window.Swal.fire('Error Lokal', 'Gagal memproses jawaban di perangkat: ' + e.message, 'error');
+              return;
+          }
 
           window.google.script.run.withSuccessHandler((res) => {
               window.examSubmitting = false; btn.prop('disabled', false).html('<i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN');
@@ -1484,8 +1484,21 @@ window.openKoreksi = function(rid) {
                   });
               } else { window.Swal.fire('Gagal', res.msg, 'error'); }
           }).withFailureHandler((err) => {
-              if (retryCount < 3) { setTimeout(() => window.processSubmission(retryCount + 1), 3000); } 
-              else { window.examSubmitting = false; btn.prop('disabled', false).html('<i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN'); window.Swal.fire('Error', 'Gagal menghubungi server. Pastikan koneksi internet stabil.', 'error'); }
+              if (retryCount < 3) { 
+                  setTimeout(() => window.processSubmission(retryCount + 1), 3000); 
+              } else { 
+                  window.examSubmitting = false; 
+                  btn.prop('disabled', false).html('<i class="fas fa-check-circle me-1"></i> KIRIM JAWABAN'); 
+                  let errMsg = err.message || 'Server timeout atau koneksi terputus.';
+                  // Jika yang ditangkap adalah halaman error HTML dari Vercel
+                  if(errMsg.includes('<html')) errMsg = "Vercel Server Timeout (504). Mohon coba lagi.";
+                  
+                  window.Swal.fire({
+                      icon: 'error',
+                      title: 'Gagal Kirim Jawaban',
+                      html: `Sistem gagal menyimpan. Pastikan koneksi internet stabil.<br><br><div class="alert alert-danger p-2 mt-2 small text-start" style="max-height: 100px; overflow-y: auto;"><b>Detail Error Server:</b><br>${errMsg}</div>`
+                  }); 
+              }
           }).submitExam(window.user.ID, window.activeExamId, ans, window.violationCount);
       };
       
