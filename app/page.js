@@ -1465,8 +1465,8 @@ window.genOptRow = function(uid, type, val='', checked='') {
                   const v = $(this).find('.summernote-opt').summernote('code'); 
                   if(v && v !== '<p><br></p>'){ 
                       opts.push(v); 
-                      // FIX UTAMA: Gunakan selector class spesifik agar tidak bocor ke checkbox Summernote
-                      if($(this).find('.opt-radio-checkbox').is(':checked')) { 
+                      // PERBAIKAN FINAL: Gunakan selector name spesifik untuk menangkap checked state
+                      if($(this).find(`input[name="k_${uid}"]`).is(':checked')) { 
                           keys.push(v); 
                           keyIndices.push(opts.length - 1); 
                       } 
@@ -1475,16 +1475,23 @@ window.genOptRow = function(uid, type, val='', checked='') {
           } else if(type==='PGKK') { 
               $('#pgkk-tbody-'+uid+' tr').each(function(){ 
                   const q = $(this).find('.pgkk-q').summernote('code'); 
-                  if(q){ opts.push(q); keys.push($(this).find('.pgkk-k').val()); } 
+                  if(q && q !== '<p><br></p>'){ 
+                      opts.push(q); 
+                      keys.push($(this).find('.pgkk-k').val()); 
+                  } 
               });
           } else if(type==='Menjodohkan') { 
               $('#match-tbody-'+uid+' tr').each(function(){ 
                   const l = $(this).find('.match-l').summernote('code'); 
                   const r = $(this).find('.match-r').summernote('code'); 
-                  if(l && r && l !== '<p><br></p>' && r !== '<p><br></p>'){ opts.push(l); keys.push(r); } 
+                  if(l && r && l !== '<p><br></p>' && r !== '<p><br></p>'){ 
+                      opts.push(l); 
+                      keys.push(r); 
+                  } 
               });
-          } else { 
-              keys = form.find('textarea[name="essay_key"]').val().split(','); 
+          } else if(type==='Uraian') { 
+              const val = form.find('textarea[name="essay_key"]').val();
+              keys = val ? val.split(',').map(s => s.trim()) : [];
           } 
           
           const payload = { id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID }; 
@@ -1684,7 +1691,17 @@ window.saveKoreksi = async function() {
               } catch (err) { window.Swal.fire('Error', err.message, 'error'); } finally { window.showLoad(false); }
           } 
       };
-      window.genOptRow = function(uid, type, val='', checked='') { return `<div class="d-flex align-items-start mb-2 ans-row gap-2"><div class="mt-2"><input type="${type}" name="k_${uid}" class="form-check-input" ${checked}></div><div class="flex-grow-1"><textarea class="summernote-opt">${val}</textarea></div><button type="button" class="btn btn-outline-danger mt-1" onclick="window.removeOptRow(this)">X</button></div>`; };
+      
+      window.genOptRow = function(uid, type, val='', checked='', idx=0) { 
+          return `<div class="d-flex align-items-start mb-2 ans-row gap-2">
+                      <div class="mt-2">
+                          <input type="${type}" name="k_${uid}" value="${idx}" class="form-check-input" autocomplete="off" ${checked}>
+                      </div>
+                      <div class="flex-grow-1"><textarea class="summernote-opt">${val}</textarea></div>
+                      <button type="button" class="btn btn-outline-danger mt-1" onclick="window.removeOptRow(this)">X</button>
+                  </div>`; 
+      };
+      
       window.genPGKKRow = function(q='', k='B') { return `<tr><td><textarea class="summernote-opt pgkk-q">${q}</textarea></td><td><select class="form-select pgkk-k"><option value="B" ${k=='B'?'selected':''}>Benar</option><option value="S" ${k=='S'?'selected':''}>Salah</option></select></td><td><button type="button" class="btn btn-danger btn-sm" onclick="window.jQuery(this).closest('tr').remove()">X</button></td></tr>`; };
       window.genMatchRow = function(l='', r='') { return `<tr><td><textarea class="summernote-opt match-l">${l}</textarea></td><td><textarea class="summernote-opt match-r">${r}</textarea></td><td><button type="button" class="btn btn-danger btn-sm" onclick="window.jQuery(this).closest('tr').remove()">X</button></td></tr>`; };
 window.addOptRow = function(uid, t) { 
