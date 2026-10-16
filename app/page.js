@@ -452,21 +452,28 @@ export default function Page() {
                   let filterHtml = `<select class="form-select form-select-sm w-auto shadow-sm" onchange="window.filterRiwayatSiswa(this.value)"><option value="">Semua Mapel</option>${uniqueMapelRiwayat.map(m=>`<option value="${m}">${m}</option>`).join('')}</select>`;
                   
                   h += `<div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2 mt-4"><h5 class="fw-bold text-primary m-0"><i class="fas fa-history me-2"></i>Riwayat</h5>${filterHtml}</div>`;
-                  
-                  if(historyData.length === 0) { 
+                                    if(historyData.length === 0) { 
                       h += '<p class="text-muted fst-italic">Belum ada riwayat.</p>'; 
                   } else {
                       h += `<div class="table-responsive bg-white rounded shadow-sm p-3"><table class="table table-hover align-middle mb-0"><thead><tr class="table-light"><th>Tanggal</th><th>Mapel</th><th>Ujian</th><th>Nilai</th><th>Status</th></tr></thead>`;
                       uniqueMapelRiwayat.forEach(mapel => {
                           h += `<tbody class="riwayat-group" data-mapel="${mapel}">
                                 <tr class="table-secondary"><td colspan="5" class="fw-bold text-dark small">${mapel}</td></tr>`;
+                          // KELOMPOKKAN DI SINI, HANYA RENDER TR ISI DATA
                           groupedHistory[mapel].forEach(r => {
-                              h += `<tr><td>${r.WaktuSubmit}</td><td><span class="badge bg-info">${mapel}</span></td><td><div class="fw-bold">${r.Judul}</div></td><td><span class="badge bg-warning text-dark">${r.Nilai}</span></td><td><span class="badge bg-success">Selesai</span></td></tr>`; 
+                              h += `<tr>
+                                      <td>${r.WaktuSubmit}</td>
+                                      <td><span class="badge bg-info">${mapel}</span></td>
+                                      <td><div class="fw-bold">${r.Judul}</div></td>
+                                      <td><span class="badge bg-warning text-dark">${r.Nilai}</span></td>
+                                      <td><span class="badge bg-success">Selesai</span></td>
+                                    </tr>`; 
                           });
                           h += `</tbody>`;
                       });
                       h += `</table></div>`;
                   }
+
               }
               area.innerHTML = h;
           } catch (err) {
@@ -738,6 +745,50 @@ export default function Page() {
       };
 
       window.openKatrolModal = function() { window.openModal('modalKatrol'); };
+
+      window.applyKatrolMassal = async function() {
+          const addVal = parseFloat(document.getElementById('katrol-value').value);
+          if (isNaN(addVal) || addVal <= 0) {
+              window.Swal.fire('Perhatian', 'Masukkan nilai katrol yang valid (lebih dari 0).', 'warning');
+              return;
+          }
+
+          if (!window.currentFilteredData || window.currentFilteredData.length === 0) {
+              window.Swal.fire('Data Kosong', 'Tidak ada data siswa yang ditampilkan untuk dikatrol.', 'warning');
+              return;
+          }
+
+          // Ambil semua ResultID dari data yang sedang difilter
+          const rids = window.currentFilteredData.map(item => item.ResultID);
+
+          const btn = document.querySelector('#modalKatrol .btn-primary');
+          const origBtn = btn.innerHTML;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+          btn.disabled = true;
+
+          try {
+              const req = await fetch('/api/cbt', { 
+                  method: 'POST', 
+                  headers: { 'Content-Type': 'application/json' }, 
+                  body: JSON.stringify({ action: 'adminKatrolMassal', args: [rids, addVal] }) 
+              });
+              const res = await req.json();
+
+              if (res.status === 'success') {
+                  window.closeModal('modalKatrol');
+                  window.toast('success', `Berhasil menambah +${addVal} nilai ke ${rids.length} siswa!`);
+                  // Refresh tabel rekap
+                  window.loadPage('hasil-rekap'); 
+              } else {
+                  window.Swal.fire('Gagal', res.msg, 'error');
+              }
+          } catch(err) {
+              window.Swal.fire('Error', err.message, 'error');
+          } finally {
+              btn.innerHTML = origBtn;
+              btn.disabled = false;
+          }
+      };
 
       window.renderRecapTable = function() {
           const uniqueKelas = [...new Set(window.recapAllData.map(item => item.KelasSiswa))].filter(k => k).sort();
