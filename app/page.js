@@ -697,7 +697,55 @@ export default function Page() {
           <button class="btn btn-sm btn-outline-danger" onclick="window.deleteResult('${r.ResultID}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`);
         });
       };
-
+      window.deleteResult = function(rid) { 
+          window.Swal.fire({
+              title: 'Hapus & Reset Ujian?', 
+              text: 'Data dihapus, status ujian direset, dan siswa bisa ujian kembali.', 
+              icon: 'warning', 
+              showCancelButton: true, 
+              confirmButtonColor: '#d33'
+          }).then(r => { 
+              if(r.isConfirmed) { 
+                  window.showLoad(true); 
+                  window.google.script.run.withSuccessHandler(res => { 
+                      window.showLoad(false); // PERBAIKAN: Mematikan loader
+                      if(res.status === 'success'){ 
+                          window.toast('success', res.msg); 
+                          window.loadPage('hasil-rekap'); 
+                      } else window.Swal.fire('Gagal', res.msg, 'error'); 
+                  }).withFailureHandler(err => { 
+                      window.showLoad(false); 
+                      window.Swal.fire('Error', err.message, 'error'); 
+                  }).adminDeleteResult(rid); 
+              } 
+          }); 
+      };
+window.openKoreksi = function(rid) {
+          const d = window.recapDataStore[rid]; 
+          if (!d) {
+              window.Swal.fire('Error', 'Data riwayat tidak ditemukan.', 'error');
+              return;
+          }
+          let detailArr = []; 
+          try { detailArr = JSON.parse(d.detail); } catch(e){ console.error("Koreksi Parse Error:", e); }
+          
+          let html = `<input type="hidden" id="kor-rid" value="${rid}"><div class="alert alert-info border-0 shadow-sm">Siswa: <b>${d.nama}</b><br>Ujian: <b>${d.ujian}</b></div>`;
+          html += `<div class="alert alert-warning mb-3">Total Nilai Saat Ini: <b class="fs-5">${d.nilai}</b><br>Anda dapat memodifikasi skor per soal di bawah ini.</div>`;
+          
+          detailArr.forEach((item, index) => {
+              let no = item.i !== undefined ? item.i : item[0]; 
+              let score = item.s !== undefined ? item.s : item[1]; 
+              let type = item.t || 'Objektif'; 
+              let ans = item.a !== undefined ? item.a : ''; 
+              let max = item.m !== undefined ? item.m : 0;
+              
+              html += `<div class="card mb-2 border-0 shadow-sm"><div class="card-body p-3"><div class="d-flex justify-content-between align-items-center mb-2"><strong class="text-primary">Soal No. ${no} <span class="badge bg-secondary ms-1">${type}</span></strong><div class="fw-bold d-flex align-items-center">Skor: <input type="number" step="0.1" class="form-control form-control-sm d-inline w-auto kor-score ms-2" data-idx="${index}" value="${score}" style="max-width: 80px;"> <span class="ms-1 text-muted">/ ${max}</span></div></div>`;
+              let displayAns = Array.isArray(ans) ? ans.join(', ') : ans;
+              html += `<div class="p-2 bg-light rounded border small mt-2"><b>Jawaban Siswa:</b><br>${displayAns ? String(displayAns).replace(/\n/g, '<br>') : '<i class="text-muted">Tidak dijawab</i>'}</div></div></div>`;
+          });
+          document.getElementById('kor-body').innerHTML = html;
+          window.openModal('modalKoreksi');
+      };
       window.printFilteredRecap = function() {
         if(!window.currentFilteredData || window.currentFilteredData.length === 0) { window.Swal.fire('Data Kosong', 'Tidak ada data nilai yang tampil untuk dicetak.', 'info'); return; }
         const fUjian = document.getElementById('filter-ujian').value || 'Semua Ujian'; const fKelas = document.getElementById('filter-kelas').value || 'Semua Kelas';
@@ -1438,7 +1486,85 @@ export default function Page() {
               window.Swal.fire('Error', err.message, 'error'); 
           }).adminSaveSingleQuestion(window.activeExamId, payload);
       };
+        
+          window.saveExam = function() {
+          let targetKelas = "";
+          const role = String(window.user.Role).trim().toLowerCase();
+          
+          if (role === 'guru') {
+              let selectedKls = [];
+              document.querySelectorAll('.kls-cb:checked').forEach(cb => selectedKls.push(cb.value));
+              if (selectedKls.length === 0) { window.Swal.fire('Error', 'Pilih minimal 1 target kelas!', 'error'); return; }
+              targetKelas = selectedKls.join(', ');
+          } else {
+              const klsEl = document.getElementById('ex-kelas');
+              if(klsEl) targetKelas = klsEl.value;
+          }
 
+          const d = {
+              examId: document.getElementById('ex-id').value,
+              judul: document.getElementById('ex-judul').value,
+              mapel: document.getElementById('ex-mapel').value,
+              durasi: document.getElementById('ex-durasi').value,
+              start: document.getElementById('ex-start').value,
+              end: document.getElementById('ex-end').value,
+              limit: document.getElementById('ex-limit').value,
+              token: document.getElementById('ex-token').value,
+              maxViolations: document.getElementById('ex-violations').value,
+              showStats: document.getElementById('ex-showStats').checked ? 'Yes' : 'No',
+              randomQ: document.getElementById('ex-randomQ').checked ? 'Yes' : 'No',
+              targetKelas: targetKelas,
+              userRole: window.user.Role,
+              userClass: window.user.Kelas,
+              userId: window.user.ID
+          };
+
+          if (!d.judul || !d.mapel || !d.start || !d.end || !d.targetKelas) {
+              window.Swal.fire('Error', 'Lengkapi data wajib!', 'error'); return;
+          }
+
+          const btn = document.querySelector('#frm-exam button[type="submit"]');
+          const origBtn = btn.innerHTML;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+          btn.disabled = true;
+
+          window.google.script.run.withSuccessHandler((res) => {
+              btn.innerHTML = origBtn; btn.disabled = false;
+              if(res.status === 'success') {
+                  window.closeModal('modalExam');
+                  // PERBAIKAN: Langsung arahkan ke refresh dashboard tanpa trigger loader tambahan
+                  window.toast('success', 'Jadwal berhasil disimpan!');
+                  window.loadPage('admin-ujian'); 
+              } else { 
+                  window.Swal.fire('Gagal Menyimpan', res.msg, 'error'); 
+              }
+          }).withFailureHandler(err => { 
+              btn.innerHTML = origBtn; btn.disabled = false; 
+              window.Swal.fire('Koneksi Error', err.message, 'error'); 
+          }).adminSaveExam(d);
+      };
+      window.delExam = function(id) { 
+          window.Swal.fire({
+              title: 'Hapus Jadwal?', 
+              text: "Jadwal dan soal ujian di dalamnya akan dihapus.",
+              icon: 'warning', 
+              showCancelButton: true, 
+              confirmButtonColor: '#d33',
+              confirmButtonText: 'Ya, Hapus!'
+          }).then(r => {
+              if(r.isConfirmed) { 
+                  window.showLoad(true); 
+                  window.google.script.run.withSuccessHandler(() => {
+                      window.showLoad(false); // PERBAIKAN: Mematikan loader!
+                      window.toast('success', 'Jadwal berhasil dihapus!');
+                      window.loadPage('admin-ujian');
+                  }).withFailureHandler(err => { 
+                      window.showLoad(false); 
+                      window.Swal.fire('Error', err.message, 'error');
+                  }).adminDeleteExam(id, window.user.ID, window.user.Role); 
+              } 
+          }); 
+      };
       window.deleteQBlock = function(uid) {
           const id=$('#block-'+uid).find('input[name="id"]').val();
           if(!id){ $('#block-'+uid).remove(); return; }
