@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { turso } from "@/lib/turso"; 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
 export async function POST(req) {
   try {
