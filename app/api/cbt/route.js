@@ -1,8 +1,26 @@
 import { NextResponse } from "next/server";
 import { turso } from "@/lib/turso"; 
+
+// ==========================================
+// KONFIGURASI VERCEL ANTI-CACHE
+// ==========================================
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 export const revalidate = 0;
+
+// ==========================================
+// HELPER: RESPONSE DENGAN NO-STORE HEADERS
+// ==========================================
+const sendRes = (data, statusCode = 200) => {
+    return NextResponse.json(data, {
+        status: statusCode,
+        headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        }
+    });
+};
 
 export async function POST(req) {
   try {
@@ -26,9 +44,9 @@ export async function POST(req) {
       }
       const res = await turso.execute({ sql: "SELECT * FROM Users WHERE Username = ? AND Password = ?", args: [username, password] });
       if (res.rows.length > 0) {
-        return NextResponse.json({ status: "success", data: res.rows[0], logo: LOGO_URL });
+        return sendRes({ status: "success", data: res.rows[0], logo: LOGO_URL });
       } else {
-        return NextResponse.json({ status: "error", msg: "Username atau Password salah!" });
+        return sendRes({ status: "error", msg: "Username atau Password salah!" });
       }
     }
 
@@ -64,7 +82,7 @@ export async function POST(req) {
         output.availableExams = exams.filter(e => e.Status === 'Aktif'); 
         output.history = historyRes.rows;
       }
-      return NextResponse.json({ status: "success", data: output });
+      return sendRes({ status: "success", data: output });
     }
 
     // ==========================================
@@ -72,7 +90,7 @@ export async function POST(req) {
     // ==========================================
     else if (action === "getUserList") {
         const usersRes = await turso.execute("SELECT * FROM Users");
-        return NextResponse.json({ status: "success", data: usersRes.rows });
+        return sendRes({ status: "success", data: usersRes.rows });
     }
     else if (action === "adminManageUser") {
         const [type, data] = args;
@@ -84,17 +102,17 @@ export async function POST(req) {
             } else {
                 await turso.execute({ sql: "INSERT INTO Users (ID, Nama, Username, Password, Role, Sekolah, Kelas) VALUES (?, ?, ?, ?, ?, ?, ?)", args: [id, data.nama, data.username, data.password, data.role, data.sekolah||'-', data.kelas||'-'] });
             }
-            return NextResponse.json({ status: "success", msg: "User berhasil disimpan!" });
+            return sendRes({ status: "success", msg: "User berhasil disimpan!" });
         } else if (type === "delete") {
             await turso.execute({ sql: "DELETE FROM Users WHERE ID = ?", args: [data.id] });
-            return NextResponse.json({ status: "success", msg: "User berhasil dihapus!" });
+            return sendRes({ status: "success", msg: "User berhasil dihapus!" });
         }
     }
     else if (action === "adminBulkDeleteUsers") {
         const [ids] = args;
         const placeholders = ids.map(() => '?').join(',');
         await turso.execute({ sql: `DELETE FROM Users WHERE ID IN (${placeholders})`, args: ids });
-        return NextResponse.json({ status: "success", msg: "User berhasil dihapus massal!" });
+        return sendRes({ status: "success", msg: "User berhasil dihapus massal!" });
     }
 
     // ==========================================
@@ -109,13 +127,20 @@ export async function POST(req) {
         } else {
             await turso.execute({ sql: "INSERT INTO Exams (ExamID, Judul, Mapel, TargetKelas, Durasi, Status, Token, StartDate, EndDate, LimitTries, ShowStats, RandomQ, PembuatID, MaxViolations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [examId, d.judul, d.mapel, d.targetKelas, d.durasi, 'Aktif', d.token||'', d.start, d.end, d.limit||1, d.showStats||'No', d.randomQ||'Yes', d.userId, d.maxViolations||3] });
         }
-        return NextResponse.json({ status: "success", msg: "Jadwal Ujian disimpan!" });
+        return sendRes({ status: "success", msg: "Jadwal Ujian disimpan!" });
     }
     else if (action === "adminDeleteExam") {
         const [id] = args;
-        await turso.execute({ sql: "DELETE FROM Exams WHERE ExamID = ?", args: [id] });
-        await turso.execute({ sql: "DELETE FROM Questions WHERE ExamID = ?", args: [id] });
-        return NextResponse.json({ status: "success", msg: "Jadwal dihapus!" });
+        const trx = await turso.transaction("write");
+        try {
+            await trx.execute({ sql: "DELETE FROM Exams WHERE ExamID = ?", args: [id] });
+            await trx.execute({ sql: "DELETE FROM Questions WHERE ExamID = ?", args: [id] });
+            await trx.commit();
+            return sendRes({ status: "success", msg: "Jadwal dihapus!" });
+        } catch(e) {
+            await trx.rollback();
+            throw e;
+        }
     }
 
     // ==========================================
@@ -125,7 +150,7 @@ export async function POST(req) {
         await turso.execute(`CREATE TABLE IF NOT EXISTS Questions (QID TEXT PRIMARY KEY, ExamID TEXT, Tipe TEXT, Pertanyaan TEXT, Options TEXT, KeyAnswer TEXT, Skor REAL, Nomor INTEGER, PembuatID TEXT)`);
         const [eid] = args;
         const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [eid] });
-        return NextResponse.json(qRes.rows);
+        return sendRes(qRes.rows);
     }
     else if (action === "adminSaveSingleQuestion") {
         const [eid, d] = args;
@@ -136,12 +161,12 @@ export async function POST(req) {
         } else {
             await turso.execute({ sql: "INSERT INTO Questions (QID, ExamID, Tipe, Pertanyaan, Options, KeyAnswer, Skor, Nomor, PembuatID) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [qid, eid, d.type, d.text, JSON.stringify(d.options), JSON.stringify(d.key), d.score, d.num, d.userId] });
         }
-        return NextResponse.json({ status: "success", id: qid, msg: "Soal disimpan!" });
+        return sendRes({ status: "success", id: qid, msg: "Soal disimpan!" });
     }
     else if (action === "adminDeleteQuestion") {
         const [id] = args;
         await turso.execute({ sql: "DELETE FROM Questions WHERE QID = ?", args: [id] });
-        return NextResponse.json({ status: "success", msg: "Soal dihapus!" });
+        return sendRes({ status: "success", msg: "Soal dihapus!" });
     }
     else if (action === "adminBatchSaveQuestions") {
         const [eid, qArr, userId] = args;
@@ -149,7 +174,7 @@ export async function POST(req) {
             let newId = 'Q' + Date.now() + Math.floor(Math.random()*1000);
             await turso.execute({ sql: "INSERT INTO Questions (QID, ExamID, Tipe, Pertanyaan, Options, KeyAnswer, Skor, Nomor, PembuatID) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [newId, eid, q.type, q.text, JSON.stringify(q.options), JSON.stringify(q.key), q.score, q.num, userId] });
         }
-        return NextResponse.json({ status: "success", msg: `${qArr.length} Soal berhasil diupload!` });
+        return sendRes({ status: "success", msg: `${qArr.length} Soal berhasil diupload!` });
     }
 
     // ==========================================
@@ -157,34 +182,34 @@ export async function POST(req) {
     // ==========================================
     else if (action === "getRecapList") {
         const results = await turso.execute("SELECT Results.*, Users.Nama as NamaSiswa, Users.Kelas as KelasSiswa, Exams.Judul as JudulUjian, Exams.Mapel, Exams.PembuatID FROM Results LEFT JOIN Users ON Results.SiswaID = Users.ID LEFT JOIN Exams ON Results.ExamID = Exams.ExamID");
-        return NextResponse.json({ status: "success", data: results.rows });
+        return sendRes({ status: "success", data: results.rows });
     }
     else if (action === "adminUpdateResult") {
         const [rid, score, detail] = args;
         await turso.execute({ sql: "UPDATE Results SET TotalNilai=?, Detail=? WHERE ResultID=?", args: [score, detail, rid] });
-        return NextResponse.json({ status: "success", msg: "Nilai diperbarui!" });
+        return sendRes({ status: "success", msg: "Nilai diperbarui!" });
     }
     else if (action === "adminKatrolMassal") {
         const [rids, addVal] = args;
         const placeholders = rids.map(() => '?').join(',');
         await turso.execute({ sql: `UPDATE Results SET TotalNilai = MIN(TotalNilai + ?, 100) WHERE ResultID IN (${placeholders})`, args: [addVal, ...rids] });
-        return NextResponse.json({ status: "success", msg: "Katrol nilai massal berhasil!" });
+        return sendRes({ status: "success", msg: "Katrol nilai massal berhasil!" });
     }
     else if (action === "adminDeleteResult") {
         const [rid] = args;
         await turso.execute({ sql: "DELETE FROM Results WHERE ResultID = ?", args: [rid] });
-        return NextResponse.json({ status: "success", msg: "Hasil Dihapus!" });
+        return sendRes({ status: "success", msg: "Hasil Dihapus!" });
     }
     else if (action === "adminBulkDeleteResult") {
         const [rids] = args;
         const placeholders = rids.map(() => '?').join(',');
         await turso.execute({ sql: `DELETE FROM Results WHERE ResultID IN (${placeholders})`, args: rids });
-        return NextResponse.json({ status: "success", msg: "Hasil berhasil dihapus massal!" });
+        return sendRes({ status: "success", msg: "Hasil berhasil dihapus massal!" });
     }
     else if (action === "getAdminData") {
         const examsRes = await turso.execute("SELECT * FROM Exams");
         const usersRes = await turso.execute("SELECT * FROM Users WHERE Role = 'siswa'");
-        return NextResponse.json({ status: "success", exams: examsRes.rows, users: usersRes.rows, logo: LOGO_URL });
+        return sendRes({ status: "success", exams: examsRes.rows, users: usersRes.rows, logo: LOGO_URL });
     }
     
     // ==========================================
@@ -199,16 +224,14 @@ export async function POST(req) {
         let questions = qRes.rows.map(q => ({ QID: q.QID, Tipe: q.Tipe, Pertanyaan: q.Pertanyaan, Options: q.Options, Nomor: q.Nomor, Extra: (q.Tipe === 'Menjodohkan') ? JSON.parse(q.KeyAnswer || "[]").sort(() => Math.random() - 0.5) : [] }));
         if(eData.RandomQ === 'Yes') questions.sort(() => Math.random() - 0.5);
 
-        return NextResponse.json({ status: "success", data: questions, duration: eData.Durasi, judul: eData.Judul, token: eData.Token, maxViolations: eData.MaxViolations });
+        return sendRes({ status: "success", data: questions, duration: eData.Durasi, judul: eData.Judul, token: eData.Token, maxViolations: eData.MaxViolations });
     }
     else if (action === "submitExam") {
         const [uid, eid, ansArr, violations] = args;
         const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [eid] });
         let totalScore = 0; let maxScore = 0; let detailLog = [];
 
-        // PERBAIKAN FATAL PENILAIAN: 
-        // Jangan hapus tag HTML (<img...>, dll) karena opsi bisa berupa gambar/rumus saja.
-        // Cukup normalkan enter/tab/spasi agar string cocok persis 100%.
+        // Normalisasi HANYA untuk komparasi saat menilai
         const normalizeStr = (s) => {
             if (s === null || s === undefined) return '';
             return String(s).replace(/[\r\n\t]+/g, ' ').trim();
@@ -255,6 +278,8 @@ export async function POST(req) {
 
             maxScore += skorItem;
             totalScore += earned;
+            
+            // NOTE: ansVal akan tersimpan ASLI 100% tanpa di-trim untuk log
             detailLog.push({ i: q.Nomor, s: Number(earned.toFixed(2)), m: skorItem, t: q.Tipe, a: ansVal });
         });
 
@@ -267,18 +292,23 @@ export async function POST(req) {
             args: [rid, uid, eid, finalScore, JSON.stringify(detailLog), violations > 0 ? `Pelanggaran: ${violations}x` : '-'] 
         });
         
-        return NextResponse.json({ status: "success", msg: "Jawaban tersimpan", data: { score: finalScore } });
+        return sendRes({ status: "success", msg: "Jawaban tersimpan", data: { score: finalScore } });
     }
     else if (action === "autosaveAnswer" || action === "updateClientProgress") {
-        return NextResponse.json({ status: "success" });
+        return sendRes({ status: "success" });
     }
     else if (action === "getLiveMonitoring") {
-        return NextResponse.json({ status: "success", data: [] });
+        return sendRes({ status: "success", data: [] });
     }
 
-    return NextResponse.json({ status: "error", msg: "Aksi tidak dikenali" });
+    return sendRes({ status: "error", msg: "Aksi tidak dikenali" });
 
   } catch (error) {
-    return NextResponse.json({ status: "error", msg: error.message }, { status: 500 });
+    return NextResponse.json({ status: "error", msg: error.message }, { 
+        status: 500,
+        headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate'
+        }
+    });
   }
 }
