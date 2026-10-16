@@ -1,6 +1,6 @@
 // app/layout.js
 export const metadata = {
-  title: 'MIN 1 MANGGARAI TIMUR - CBT',
+  title: 'BELAJAR INOVASI - CBT',
   description: 'Aplikasi CBT Berbasis Next.js',
 }
 
