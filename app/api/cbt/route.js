@@ -226,7 +226,7 @@ export async function POST(req) {
 
         return sendRes({ status: "success", data: questions, duration: eData.Durasi, judul: eData.Judul, token: eData.Token, maxViolations: eData.MaxViolations });
     }
-    else if (action === "submitExam") {
+        else if (action === "submitExam") {
         const [uid, eid, ansArr, violations] = args;
         const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [eid] });
         let totalScore = 0; let maxScore = 0; let detailLog = [];
@@ -237,11 +237,11 @@ export async function POST(req) {
         };
 
         qRes.rows.forEach(q => {
-            // Pastikan ansArr adalah array sebelum mencoba find()
             const amanAnsArr = Array.isArray(ansArr) ? ansArr : [];
             const userAns = amanAnsArr.find(a => String(a.qid) === String(q.QID));
             const ansVal = userAns ? userAns.answer : '';
             
+            // Parsing Kunci Jawaban
             let rawKeys = q.KeyAnswer || q.Key || "[]";
             let keyArr = [];
             try { 
@@ -249,32 +249,55 @@ export async function POST(req) {
                 keyArr = Array.isArray(parsed) ? parsed : [parsed];
             } catch(e) { keyArr = []; }
 
+            // Parsing Opsi (Untuk mendeteksi jika siswa mencentang semua pilihan)
+            let optsArr = [];
+            try {
+                optsArr = JSON.parse(q.Options || "[]");
+            } catch(e) { optsArr = []; }
+
             const skorItem = Number(q.Skor || 10);
             let earned = 0;
 
             // ==============================================================
-            // PERBAIKAN: Keamanan Komparasi Array
+            // LOGIKA PENILAIAN PARSIAL & PENALTI
             // ==============================================================
             if (q.Tipe === 'PGS') {
                 if (normalizeStr(ansVal) === normalizeStr(keyArr[0])) earned = skorItem;
             } 
             else if (q.Tipe === 'PGK') {
-                // Pastikan ansVal dan keyArr adalah Array sebelum memanggil sort()
                 const amanAnsVal = Array.isArray(ansVal) ? ansVal : (ansVal ? [ansVal] : []);
-                const cleanAns = amanAnsVal.map(normalizeStr).sort();
-                const cleanKey = keyArr.map(normalizeStr).sort();
-                if (JSON.stringify(cleanAns) === JSON.stringify(cleanKey)) earned = skorItem;
+                const cleanAns = amanAnsVal.map(normalizeStr);
+                const cleanKey = keyArr.map(normalizeStr);
+                
+                // 1. Hitung jumlah centang yang BENAR
+                let correctSelected = cleanAns.filter(ans => cleanKey.includes(ans)).length;
+                // 2. Hitung jumlah centang yang SALAH (Jawaban mengecoh)
+                let wrongSelected = cleanAns.filter(ans => !cleanKey.includes(ans)).length;
+
+                // 3. Kalkulasi Nilai Parsial: (Benar - Salah) / Total Kunci * Skor
+                if (cleanKey.length > 0) {
+                    earned = ((correctSelected - wrongSelected) / cleanKey.length) * skorItem;
+                }
+
+                // 4. PENALTI MUTLAK: Jika siswa mencentang SEMUA opsi (dan kunci aslinya tidak semua benar)
+                if (optsArr.length > 0 && cleanAns.length === optsArr.length && cleanKey.length < optsArr.length) {
+                    earned = 0; 
+                }
+
+                // Cegah nilai minus untuk 1 soal jika terlalu banyak salah centang
+                if (earned < 0) earned = 0;
             } 
             else if (q.Tipe === 'PGKK' || q.Tipe === 'Menjodohkan') {
                 let correctCount = 0;
-                // Pastikan ansVal bisa dibaca by index
                 const amanAnsVal = Array.isArray(ansVal) ? ansVal : [];
                 
+                // Kalkulasi Parsial Murni: Dihitung per baris/pasangan
                 keyArr.forEach((k, idx) => { 
                     if (amanAnsVal[idx] !== undefined && normalizeStr(amanAnsVal[idx]) === normalizeStr(k)) {
                         correctCount++;
                     }
                 });
+                
                 earned = keyArr.length > 0 ? (correctCount / keyArr.length) * skorItem : 0;
             } 
             else if (q.Tipe === 'Uraian') {
@@ -297,6 +320,7 @@ export async function POST(req) {
         
         return sendRes({ status: "success", msg: "Jawaban tersimpan", data: { score: finalScore } });
     }
+
     else if (action === "autosaveAnswer" || action === "updateClientProgress") {
         return sendRes({ status: "success" });
     }
