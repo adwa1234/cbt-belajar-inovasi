@@ -1450,7 +1450,6 @@ window.openKoreksi = function(rid) {
                   });
                   inp += `</tbody></table>`;
               } 
-              } 
               else if(q.Tipe==='Menjodohkan') {
                   const rawOpts = JSON.parse(q.Options||"[]"); 
                   const rItems = q.Extra || []; 
@@ -1534,7 +1533,7 @@ window.openKoreksi = function(rid) {
               } catch(e){}
           }, 60000);
       };
-
+      
       window.saveAnsLocal = function(qid, type, idx) {
           let val; 
           if(type.includes('PG')) { if(type==='PGK') { val=[]; $(`input[name="ans-${qid}"]:checked`).each(function(){ val.push(decodeURIComponent($(this).val())) }); } else val = decodeURIComponent($(`input[name="ans-${qid}"]:checked`).val()); } 
@@ -1933,16 +1932,7 @@ window.renderAnsFields = function(uid, type) {
       };
 
 
-      window.saveQBlock = async function(uid) {
-          const form = $('#frm-q-'+uid); 
-          const type = form.find('select[name="type"]').val(); 
-          const text = $('#sn-'+uid).summernote('code');
-          const score = form.find('input[name="score"]').val(); 
-          const num = form.find('input[name="num"]').val();
-          const id = form.find('input[name="id"]').val(); 
-          let opts=[], keys=[], keyIndices=[];
-          
-          if (type === 'PGS' || type === 'PGK') { 
+      if (type === 'PGS' || type === 'PGK') { 
               $('#opts-wrap-'+uid+' .ans-row').each(function(){ 
                   const v = $(this).find('.summernote-opt').summernote('code'); 
                   if(v && v !== '<p><br></p>'){ 
@@ -1980,34 +1970,7 @@ window.renderAnsFields = function(uid, type) {
           else if(type==='Uraian') { 
               const val = form.find('textarea[name="essay_key"]').val();
               keys = val ? val.split(',').map(s => s.trim()) : [];
-          } 
-          
-          const payload = { id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID }; 
-          
-          const btn = form.find('button.btn-success');
-          const origText = btn.html();
-          btn.prop('disabled',true).html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...');
-          
-          try {
-              const req = await fetch('/api/cbt', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ action: 'adminSaveSingleQuestion', args: [window.activeExamId, payload] })
-              });
-              const res = await req.json();
-              
-              if(res.status === 'success'){
-                  window.toast('success','Soal Disimpan!');
-                  window.toggleEditQ(uid); 
-                  await window.loadQList(); 
-              } else {
-                  window.Swal.fire('Error', res.msg, 'error');
-              }
-          } catch(err) {
-              window.Swal.fire('Error', err.message, 'error');
-          } finally {
-              btn.prop('disabled',false).html(origText);
           }
-      };
 window.saveKoreksi = async function() {
           const rid = document.getElementById('kor-rid').value;
           const d = window.recapDataStore[rid];
