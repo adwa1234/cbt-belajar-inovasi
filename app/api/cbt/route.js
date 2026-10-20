@@ -228,7 +228,13 @@ export async function POST(req) {
     }
     else if (action === "submitExam") {
         const [uid, eid, ansArr, violations] = args;
-        const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [eid] });
+        
+        // 1. AMANKAN PARAMETER DARI UNDEFINED / NULL (Mencegah Turso Crash)
+        const safeEid = eid ? String(eid) : '';
+        const safeUid = uid ? String(uid) : '';
+        const safeViolations = Number(violations) || 0;
+
+        const qRes = await turso.execute({ sql: "SELECT * FROM Questions WHERE ExamID = ?", args: [safeEid] });
         let totalScore = 0; let maxScore = 0; let detailLog = [];
 
         const normalizeStr = (s) => {
@@ -241,22 +247,22 @@ export async function POST(req) {
             const userAns = amanAnsArr.find(a => String(a.qid) === String(q.QID));
             const ansVal = userAns ? userAns.answer : '';
             
-            // PERBAIKAN: Jika KeyAnswer adalah teks biasa peninggalan lama (bukan JSON), amankan ke dalam array
             let rawKeys = q.KeyAnswer || q.Key || "[]";
             let keyArr = [];
             try { 
                 let parsed = JSON.parse(rawKeys);
                 keyArr = Array.isArray(parsed) ? parsed : [parsed];
-            } catch(e) { 
-                keyArr = [rawKeys]; // Paksa menjadi array jika gagal di-parse
-            }
+            } catch(e) { keyArr = [rawKeys]; } // Fallback jika format teks biasa
 
             let optsArr = [];
             try {
                 optsArr = JSON.parse(q.Options || "[]");
             } catch(e) { optsArr = []; }
 
-            const skorItem = Number(q.Skor || 10);
+            // 2. AMANKAN SKOR SOAL AGAR TIDAK NaN
+            let skorItem = parseFloat(q.Skor);
+            if (isNaN(skorItem)) skorItem = 10; // Default 10 jika kosong
+
             let earned = 0;
 
             if (q.Tipe === 'PGS') {
@@ -295,18 +301,24 @@ export async function POST(req) {
                 earned = 0; 
             }
 
+            // 3. AMANKAN NILAI EARNED AGAR TIDAK NaN
+            if (isNaN(earned)) earned = 0;
+
             maxScore += skorItem;
             totalScore += earned;
             
             detailLog.push({ i: q.Nomor, s: Number(earned.toFixed(2)), m: skorItem, t: q.Tipe, a: ansVal });
         });
 
-        const finalScore = maxScore > 0 ? Number(((totalScore / maxScore) * 100).toFixed(2)) : 0;
+        // 4. AMANKAN NILAI AKHIR (FINAL SCORE) AGAR TIDAK NaN
+        let finalScore = maxScore > 0 ? Number(((totalScore / maxScore) * 100).toFixed(2)) : 0;
+        if (isNaN(finalScore)) finalScore = 0;
+
         const rid = 'RES' + Date.now() + Math.floor(Math.random() * 1000);
         
         await turso.execute({ 
             sql: "INSERT INTO Results (ResultID, SiswaID, ExamID, TotalNilai, Detail, Pelanggaran) VALUES (?, ?, ?, ?, ?, ?)", 
-            args: [rid, uid, eid, finalScore, JSON.stringify(detailLog), violations > 0 ? `Pelanggaran: ${violations}x` : '-'] 
+            args: [rid, safeUid, safeEid, finalScore, JSON.stringify(detailLog), safeViolations > 0 ? `Pelanggaran: ${safeViolations}x` : '-'] 
         });
         
         return sendRes({ status: "success", msg: "Jawaban tersimpan", data: { score: finalScore } });
