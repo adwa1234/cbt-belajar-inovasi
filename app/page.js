@@ -1418,10 +1418,28 @@ window.openKoreksi = function(rid) {
                   inp = `<table class="table table-bordered tbl-pgkk mt-3 bg-white"><thead><tr class="table-light"><th>PERNYATAAN</th><th width="15%">BENAR</th><th width="15%">SALAH</th></tr></thead><tbody>`;
                   opts.forEach((o,x)=> inp+=`<tr><td><div class="opt-content">${o}</div></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="B" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="S" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td></tr>`);
                   inp += `</tbody></table>`;
-              } else if(q.Tipe==='Menjodohkan') {
-                  const lItems = JSON.parse(q.Options||"[]"); const rItems = q.Extra || [];
-                  inp = `<div class="match-container" id="match-area-${i}"><input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})"><svg class="match-svg" id="svg-${i}"></svg><div class="match-col" id="col-l-${i}">${lItems.map((t,Idx)=>`<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div><div class="match-col" id="col-r-${i}">${rItems.map((t,Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('')}</div></div><div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning" onclick="window.resetMatch(${i})">Reset Garis</button></div>`;
-              } else if(q.Tipe.includes('PG')) {
+} else if(q.Tipe==='Menjodohkan') {
+                  const rawOpts = JSON.parse(q.Options||"[]"); 
+                  const rItems = q.Extra || []; 
+                  
+                  let leftHtml = '';
+                  rawOpts.forEach((t, Idx) => {
+                      if (t && t.trim() !== '') {
+                          leftHtml += `<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l', ${Idx}, this)"><div class="opt-content">${t}</div></div>`;
+                      }
+                  });
+
+                  let rightHtml = rItems.map((t, Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('');
+
+                  inp = `<div class="match-container" id="match-area-${i}">
+                            <input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})">
+                            <svg class="match-svg" id="svg-${i}"></svg>
+                            <div class="match-col" id="col-l-${i}">${leftHtml}</div>
+                            <div class="match-col" id="col-r-${i}">${rightHtml}</div>
+                         </div>
+                         <div class="text-end mt-3"><button class="btn btn-sm btn-outline-warning shadow-sm" onclick="window.resetMatch(${i})"><i class="fas fa-undo me-1"></i> Reset Garis</button></div>`;
+              }
+          } else if(q.Tipe.includes('PG')) {
                   const opts = JSON.parse(q.Options||"[]");
                   opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
               } else inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="window.saveAnsLocal('${q.QID}', 'ESSAY', ${i})"></textarea>`;
@@ -1598,8 +1616,76 @@ window.openKoreksi = function(rid) {
           }).submitExam(window.user.ID, window.activeExamId, ans, window.violationCount);
       };
       
-      window.matchClick = function(qIdx, side, itemIdx, el) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; const st = window.matchState[qIdx]; $(`#match-area-${qIdx} .match-${side}`).removeClass('selected'); $(el).addClass('selected'); if(side === 'l') { st.sel = { idx: itemIdx, el: el }; } else { if(st.sel) { st.pairs = st.pairs.filter(p => p.left !== st.sel.idx); st.pairs.push({ left: st.sel.idx, right: itemIdx, rightVal: decodeURIComponent($(el).data('val')) }); window.drawLines(qIdx); window.markAns(qIdx); st.sel = null; $(`#match-area-${qIdx} .match-item`).removeClass('selected'); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); } } };
-      window.drawLines = function(qIdx) { if(!window.matchState[qIdx]) return; const svg = document.getElementById(`svg-${qIdx}`); const container = document.getElementById(`match-area-${qIdx}`); if(!container || !svg) return; const rectC = container.getBoundingClientRect(); let html = ''; let answerArr = []; const leftCount = $(`#col-l-${qIdx}`).children().length; for(let k=0; k<leftCount; k++) answerArr[k] = null; $(`#match-area-${qIdx} .match-item`).removeClass('matched'); window.matchState[qIdx].pairs.forEach(p => { const elL = $(`#col-l-${qIdx}`).children().eq(p.left)[0]; const elR = $(`#col-r-${qIdx}`).children().eq(p.right)[0]; if(elL && elR) { const rL = elL.getBoundingClientRect(); const rR = elR.getBoundingClientRect(); const x1 = rL.right - rectC.left; const y1 = (rL.top + rL.height/2) - rectC.top; const x2 = rR.left - rectC.left; const y2 = (rR.top + rR.height/2) - rectC.top; html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#10b981" stroke-width="3" />`; $(elL).addClass('matched'); $(elR).addClass('matched'); answerArr[p.left] = p.rightVal; } }); svg.innerHTML = html; $(`#ans-in-${qIdx}`).val(JSON.stringify(answerArr)); };
+      // 1. UPDATE FUNGSI MATCH CLICK AGAR FLEKSIBEL (KIRI -> KANAN / KANAN -> KIRI)
+      window.matchClick = function(qIdx, side, itemIdx, el) { 
+          if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; 
+          const st = window.matchState[qIdx]; 
+          
+          $(`#match-area-${qIdx} .match-item`).removeClass('selected'); 
+          $(el).addClass('selected'); 
+          
+          if (!st.sel) {
+              st.sel = { side: side, idx: itemIdx, el: el };
+          } else {
+              if (st.sel.side === side) {
+                  st.sel = { side: side, idx: itemIdx, el: el };
+              } else {
+                  let leftIdx = st.sel.side === 'l' ? st.sel.idx : itemIdx;
+                  let rightIdx = st.sel.side === 'r' ? st.sel.idx : itemIdx;
+                  let rightEl = st.sel.side === 'r' ? st.sel.el : el;
+                  
+                  st.pairs = st.pairs.filter(p => p.left !== leftIdx); 
+                  st.pairs.push({ left: leftIdx, right: rightIdx, rightVal: decodeURIComponent($(rightEl).data('val')) }); 
+                  
+                  window.drawLines(qIdx); 
+                  window.markAns(qIdx); 
+                  st.sel = null; 
+                  $(`#match-area-${qIdx} .match-item`).removeClass('selected'); 
+                  window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); 
+              }
+          }
+      };
+
+      // 2. UPDATE FUNGSI DRAW LINES AGAR TIDAK ERROR SAAT ADA PENGGAMBARAN PENGECOH
+      window.drawLines = function(qIdx) { 
+          if(!window.matchState[qIdx]) return; 
+          const svg = document.getElementById(`svg-${qIdx}`); 
+          const container = document.getElementById(`match-area-${qIdx}`); 
+          if(!container || !svg) return; 
+          
+          const rectC = container.getBoundingClientRect(); 
+          let html = ''; 
+          let answerArr = []; 
+          
+          let maxIdx = -1;
+          $(`#match-area-${qIdx} .match-left`).each(function() {
+               let dIdx = parseInt($(this).data('idx'));
+               if(dIdx > maxIdx) maxIdx = dIdx;
+          });
+          for(let k=0; k<=maxIdx; k++) answerArr[k] = null; 
+
+          $(`#match-area-${qIdx} .match-item`).removeClass('matched'); 
+          
+          window.matchState[qIdx].pairs.forEach(p => { 
+              const elL = $(`#match-area-${qIdx} .match-left[data-idx="${p.left}"]`)[0]; 
+              const elR = $(`#match-area-${qIdx} .match-right[data-idx="${p.right}"]`)[0]; 
+              if(elL && elR) { 
+                  const rL = elL.getBoundingClientRect(); 
+                  const rR = elR.getBoundingClientRect(); 
+                  const x1 = rL.right - rectC.left; 
+                  const y1 = (rL.top + rL.height/2) - rectC.top; 
+                  const x2 = rR.left - rectC.left; 
+                  const y2 = (rR.top + rR.height/2) - rectC.top; 
+                  
+                  html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#84cc16" stroke-width="4" stroke-linecap="round" />`; 
+                  $(elL).addClass('matched');$(elR).addClass('matched'); 
+                  answerArr[p.left] = p.rightVal; 
+              } 
+          }); 
+          svg.innerHTML = html; 
+          $(`#ans-in-${qIdx}`).val(JSON.stringify(answerArr)); 
+      };
+
       window.resetMatch = function(qIdx) { window.matchState[qIdx] = { sel: null, pairs: [] }; document.getElementById(`svg-${qIdx}`).innerHTML = ''; $(`#match-area-${qIdx} .match-item`).removeClass('matched selected'); $(`#ans-in-${qIdx}`).val(''); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); };
       window.redrawMatchLines = function(qIdx, savedArr, rightItems) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; if(Array.isArray(savedArr)) { window.matchState[qIdx].pairs = []; savedArr.forEach((val, lIdx) => { if(val) { const rIdx = rightItems.indexOf(val); if(rIdx > -1) { window.matchState[qIdx].pairs.push({ left: lIdx, right: rIdx, rightVal: val }); } } }); window.drawLines(qIdx); } };
       
@@ -1687,16 +1773,22 @@ window.genOptRow = function(uid, type, val='', checked='') {
                       keys.push($(this).find('.pgkk-k').val()); 
                   } 
               });
-          } else if(type==='Menjodohkan') { 
+} else if(type==='Menjodohkan') { 
               $('#match-tbody-'+uid+' tr').each(function(){ 
                   const l = $(this).find('.match-l').summernote('code'); 
                   const r = $(this).find('.match-r').summernote('code'); 
-                  if(l && r && l !== '<p><br></p>' && r !== '<p><br></p>'){ 
-                      opts.push(l); 
-                      keys.push(r); 
+                  
+                  // L Boleh Kosong (Sebagai Pengecoh), R Wajib Isi
+                  const cleanL = (l && l !== '<p><br></p>') ? l : '';
+                  const cleanR = (r && r !== '<p><br></p>') ? r : '';
+
+                  if(cleanR !== ''){ 
+                      opts.push(cleanL); 
+                      keys.push(cleanR); 
                   } 
               });
-          } else if(type==='Uraian') { 
+          }
+                  } else if(type==='Uraian') { 
               const val = form.find('textarea[name="essay_key"]').val();
               keys = val ? val.split(',').map(s => s.trim()) : [];
           } 
@@ -1818,9 +1910,17 @@ window.genOptRow = function(uid, type, val='', checked='') {
               h = `<table class="table table-sm"><thead><tr><th>Pernyataan</th><th>Kunci</th><th>X</th></tr></thead><tbody id="pgkk-tbody-${uid}">`; 
               if(opts.length) opts.forEach((o,i)=>h+=window.genPGKKRow(o,keys[i])); else h+=window.genPGKKRow(); h+=`</tbody></table><button type="button" class="btn btn-sm btn-info" onclick="window.addPGKKRowTo('${uid}')">+ Baris</button>`; 
           } else if (type === 'Menjodohkan') { 
-              h = `<table class="table table-sm"><thead><tr><th>Kiri</th><th>Kanan (Kunci)</th><th>X</th></tr></thead><tbody id="match-tbody-${uid}">`;
-              if(opts.length) opts.forEach((o,i)=>h+=window.genMatchRow(o,keys[i])); else h+=window.genMatchRow(); h+=`</tbody></table><button type="button" class="btn btn-sm btn-info" onclick="window.addMatchRowTo('${uid}')">+ Pasangan</button>`;
-          } else if (type === 'Uraian') { 
+              h = `<div class="alert alert-light small border mb-2"><i class="fas fa-info-circle me-1"></i> Biarkan kolom <b>Kiri</b> kosong jika kolom <b>Kanan</b> hanya sebagai jawaban pengecoh.</div>`;
+              h += `<table class="table table-sm"><thead><tr><th>Kiri (Pernyataan)</th><th>Kanan (Kunci / Pengecoh)</th><th>X</th></tr></thead><tbody id="match-tbody-${uid}">`;
+              let maxLen = Math.max(opts.length, keys.length);
+              if(maxLen > 0) {
+                  for(let i=0; i<maxLen; i++) h += window.genMatchRow(opts[i] || '', keys[i] || '');
+              } else {
+                  h += window.genMatchRow();
+              }
+              h += `</tbody></table><button type="button" class="btn btn-sm btn-info" onclick="window.addMatchRowTo('${uid}')">+ Baris Pasangan</button>`;
+          }
+      } else if (type === 'Uraian') { 
               h = `<textarea class="form-control" name="essay_key" placeholder="Kata kunci penilaian (dipisah koma)">${keys.join(',')}</textarea>`; 
           } 
           
@@ -2158,6 +2258,17 @@ window.addOptRow = function(uid, t) {
           .loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 10000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
           .spinner { width: 50px; height: 50px; border: 5px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
           @keyframes spin { 100% { transform: rotate(360deg); } }
+
+          /* UI SOAL MENJODOHKAN */
+          .match-container { display: flex; justify-content: space-between; position: relative; gap: 60px; margin-top: 15px; padding: 10px; }
+          .match-col { flex: 1; display: flex; flex-direction: column; gap: 15px; z-index: 2; min-width: 0; }
+          .match-item { background: #ffffff; border: 2px solid #cbd5e1; border-radius: 8px; padding: 15px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.05); user-select: none; }
+          .match-item:hover { border-color: var(--secondary); transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+          .match-item.selected { border-color: var(--primary); background: #f3e8ff; box-shadow: 0 0 0 3px rgba(126,34,206,0.2); transform: scale(1.02); }
+          .match-item.matched { border-color: var(--accent); background: #f7fee7; opacity: 0.95; }
+          .match-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: visible; }
+          .opt-content p { margin-bottom: 0; } /* Mencegah paragraf merusak tinggi kotak */
+          
         </style>
 
         <div id="loader" class="loader hidden"><div class="spinner"></div></div>
