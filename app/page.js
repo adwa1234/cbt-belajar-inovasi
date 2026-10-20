@@ -1418,6 +1418,36 @@ window.openKoreksi = function(rid) {
                   inp = `<table class="table table-bordered tbl-pgkk mt-3 bg-white"><thead><tr class="table-light"><th>PERNYATAAN</th><th width="15%">BENAR</th><th width="15%">SALAH</th></tr></thead><tbody>`;
                   opts.forEach((o,x)=> inp+=`<tr><td><div class="opt-content">${o}</div></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="B" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="S" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td></tr>`);
                   inp += `</tbody></table>`;
+              } else if(q.Tipe==='Menjodohkan') {
+                  const rawOpts = JSON.parse(q.Options||"[]"); 
+                  const rItems = q.Extra || []; 
+                  
+                  let leftHtml = '';
+                  rawOpts.forEach((t, Idx) => {
+                      if (t && t.trim() !== '') {
+                          leftHtml += `<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l', ${Idx}, this)"><div class="opt-content">${t}</div></div>`;
+                      }
+                  });
+
+                  let rightHtml = rItems.map((t, Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('');
+
+                  inp = `<div class="match-container" id="match-area-${i}">
+                            <input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})">
+                            <svg class="match-svg" id="svg-${i}"></svg>
+                            <div class="match-col" id="col-l-${i}">${leftHtml}</div>
+                            <div class="match-col" id="col-r-${i}">${rightHtml}</div>
+                         </div>
+                         <div class="text-end mt-3"><button class="btn btn-sm btn-outline-warning shadow-sm" onclick="window.resetMatch(${i})"><i class="fas fa-undo me-1"></i> Reset Garis</button></div>`;
+              } else if(q.Tipe.includes('PG')) {
+                  const opts = JSON.parse(q.Options||"[]");
+                  opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
+              } else {
+                  inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="window.saveAnsLocal('${q.QID}', 'ESSAY', ${i})"></textarea>`;
+              }
+              
+              c.append(`<div class="q-slide hidden" id="sl-${i}" data-qid="${q.QID}" data-type="${q.Tipe}"><div class="badge bg-primary mb-3">Soal No. ${q.Nomor||i+1}</div><div class="mb-4 q-content lead">${q.Pertanyaan}</div>${inp}</div>`);
+              g.append(`<button id="nb-${i}" class="q-nav-btn ${i===0?'active-q':''}" onclick="window.jump(${i})">${i+1}</button>`);
+          });
 } else if(q.Tipe==='Menjodohkan') {
                   const rawOpts = JSON.parse(q.Options||"[]"); 
                   const rItems = q.Extra || []; 
@@ -1773,7 +1803,7 @@ window.genOptRow = function(uid, type, val='', checked='') {
                       keys.push($(this).find('.pgkk-k').val()); 
                   } 
               });
-} else if(type==='Menjodohkan') { 
+          } else if(type==='Menjodohkan') { 
               $('#match-tbody-'+uid+' tr').each(function(){ 
                   const l = $(this).find('.match-l').summernote('code'); 
                   const r = $(this).find('.match-r').summernote('code'); 
@@ -1787,11 +1817,10 @@ window.genOptRow = function(uid, type, val='', checked='') {
                       keys.push(cleanR); 
                   } 
               });
-          }
-                  } else if(type==='Uraian') { 
+          } else if(type==='Uraian') { 
               const val = form.find('textarea[name="essay_key"]').val();
               keys = val ? val.split(',').map(s => s.trim()) : [];
-          } 
+          }
           
           const payload = { id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID }; 
           
