@@ -287,16 +287,26 @@ export async function POST(req) {
             } 
             else if (q.Tipe === 'PGKK' || q.Tipe === 'Menjodohkan') {
                 let correctCount = 0;
+                let validPairs = 0; // Total pasangan valid, pengecoh diabaikan
                 const amanAnsVal = Array.isArray(ansVal) ? ansVal : [];
                 
                 keyArr.forEach((k, idx) => { 
-                    if (amanAnsVal[idx] !== undefined && normalizeStr(amanAnsVal[idx]) === normalizeStr(k)) {
-                        correctCount++;
+                    let isPernyataanValid = true;
+                    // Abaikan kalkulasi denominator jika ini hanyalah opsi pengecoh (kiri kosong)
+                    if (q.Tipe === 'Menjodohkan' && (!optsArr[idx] || optsArr[idx] === '')) {
+                        isPernyataanValid = false; 
+                    }
+
+                    if (isPernyataanValid) {
+                        validPairs++;
+                        if (amanAnsVal[idx] !== undefined && normalizeStr(amanAnsVal[idx]) === normalizeStr(k)) {
+                            correctCount++;
+                        }
                     }
                 });
                 
-                earned = keyArr.length > 0 ? (correctCount / keyArr.length) * skorItem : 0;
-            } 
+                earned = validPairs > 0 ? (correctCount / validPairs) * skorItem : 0;
+            }
             else if (q.Tipe === 'Uraian') {
                 earned = 0; 
             }
