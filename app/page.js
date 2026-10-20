@@ -1336,20 +1336,44 @@ window.openKoreksi = function(rid) {
           });
       };
 
-      window.refreshUjianSiswa = function() {
-          window.Swal.fire({ title: 'Refresh Data Ujian?', text: 'Menyegarkan data soal tanpa menghilangkan jawaban.', icon: 'info', showCancelButton: true, confirmButtonText: 'Ya, Refresh' }).then(r => {
-              if (r.isConfirmed) {
-                  window.disableSecurity(); window.showLoad(true);
-                  window.google.script.run.withSuccessHandler(res => {
-                      window.showLoad(false);
-                      if(res.status === 'success') {
-                          window.totalQ = res.data.length; window.activeExamViolations = res.maxViolations || 3;
-                          window.enableSecurity(); window.runExam(res.data, res.duration, true);
-                          window.Swal.fire('Berhasil', 'Soal disinkronisasi.', 'success');
-                      } else { window.Swal.fire('Gagal', res.msg, 'error'); }
-                  }).withFailureHandler(err => { window.showLoad(false); window.Swal.fire('Error', err.message, 'error'); }).getExamPack(window.activeExamId, window.user.ID);
-              }
+      window.refreshUjianSiswa = async function() {
+          const r = await window.Swal.fire({ 
+              title: 'Refresh Data Ujian?', 
+              text: 'Menyegarkan data soal tanpa menghilangkan jawaban.', 
+              icon: 'info', 
+              showCancelButton: true, 
+              confirmButtonText: 'Ya, Refresh' 
           });
+
+          if (r.isConfirmed) {
+              window.disableSecurity(); 
+              window.showLoad(true);
+              
+              try {
+                  const req = await fetch('/api/cbt', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'getExamPack', args: [window.activeExamId, window.user.ID] })
+                  });
+                  const res = await req.json();
+
+                  if (res.status === 'success') {
+                      window.totalQ = res.data.length; 
+                      window.activeExamViolations = res.maxViolations || 3;
+                      window.enableSecurity(); 
+                      window.runExam(res.data, res.duration, true);
+                      window.Swal.fire('Berhasil', 'Soal disinkronisasi.', 'success');
+                  } else {
+                      window.Swal.fire('Gagal', res.msg, 'error');
+                      window.enableSecurity(); 
+                  }
+              } catch(err) {
+                  window.Swal.fire('Error', err.message, 'error');
+                  window.enableSecurity();
+              } finally {
+                  window.showLoad(false);
+              }
+          }
       };
 
       window.enableSecurity = function() { 
@@ -1426,6 +1450,7 @@ window.openKoreksi = function(rid) {
                   });
                   inp += `</tbody></table>`;
               } 
+              } 
               else if(q.Tipe==='Menjodohkan') {
                   const rawOpts = JSON.parse(q.Options||"[]"); 
                   const rItems = q.Extra || []; 
@@ -1439,14 +1464,22 @@ window.openKoreksi = function(rid) {
 
                   let rightHtml = rItems.map((t, Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('');
 
-                  inp = `<div class="match-container" id="match-area-${i}">
+                  inp = `<div class="match-container bg-light border border-2 border-light-subtle p-3 rounded-3" id="match-area-${i}">
                             <input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})">
                             <svg class="match-svg" id="svg-${i}"></svg>
-                            <div class="match-col" id="col-l-${i}">${leftHtml}</div>
-                            <div class="match-col" id="col-r-${i}">${rightHtml}</div>
+                            
+                            <div class="match-col" id="col-l-${i}">
+                                <div class="text-center fw-bold bg-secondary text-white p-2 rounded shadow-sm">PERNYATAAN</div>
+                                ${leftHtml}
+                            </div>
+                            
+                            <div class="match-col" id="col-r-${i}">
+                                <div class="text-center fw-bold bg-primary text-white p-2 rounded shadow-sm">PILIHAN JAWABAN</div>
+                                ${rightHtml}
+                            </div>
                          </div>
-                         <div class="text-end mt-3"><button class="btn btn-sm btn-outline-warning shadow-sm" onclick="window.resetMatch(${i})"><i class="fas fa-undo me-1"></i> Reset Garis</button></div>`;
-              } 
+                         <div class="text-end mt-3"><button class="btn btn-sm btn-warning shadow-sm fw-bold text-dark" onclick="window.resetMatch(${i})"><i class="fas fa-undo me-1"></i> Reset Garis</button></div>`;
+              }
               else if(q.Tipe.includes('PG')) {
                   const opts = JSON.parse(q.Options||"[]");
                   opts.forEach(o => {
@@ -1710,7 +1743,8 @@ window.openKoreksi = function(rid) {
                   const x2 = rR.left - rectC.left; 
                   const y2 = (rR.top + rR.height/2) - rectC.top; 
                   
-                  html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#84cc16" stroke-width="4" stroke-linecap="round" />`; 
+                  // WARNA GARIS DIGELAPKAN DAN DITEBALKAN DENGAN EFEK SHADOW
+                  html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#4c1d95" stroke-width="6" stroke-linecap="round" filter="drop-shadow(2px 2px 2px rgb(0 0 0 / 0.3))" />`; 
                   $(elL).addClass('matched');$(elR).addClass('matched'); 
                   answerArr[p.left] = p.rightVal; 
               } 
@@ -1718,7 +1752,7 @@ window.openKoreksi = function(rid) {
           svg.innerHTML = html; 
           $(`#ans-in-${qIdx}`).val(JSON.stringify(answerArr)); 
       };
-
+    
       window.resetMatch = function(qIdx) { window.matchState[qIdx] = { sel: null, pairs: [] }; document.getElementById(`svg-${qIdx}`).innerHTML = ''; $(`#match-area-${qIdx} .match-item`).removeClass('matched selected'); $(`#ans-in-${qIdx}`).val(''); window.saveAnsLocal($(`#sl-${qIdx}`).data('qid'), 'MATCH', qIdx); };
       window.redrawMatchLines = function(qIdx, savedArr, rightItems) { if(!window.matchState[qIdx]) window.matchState[qIdx] = { sel: null, pairs: [] }; if(Array.isArray(savedArr)) { window.matchState[qIdx].pairs = []; savedArr.forEach((val, lIdx) => { if(val) { const rIdx = rightItems.indexOf(val); if(rIdx > -1) { window.matchState[qIdx].pairs.push({ left: lIdx, right: rIdx, rightVal: val }); } } }); window.drawLines(qIdx); } };
       
