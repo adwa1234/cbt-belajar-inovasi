@@ -687,7 +687,103 @@ export default function Page() {
               }
           });
       };
+// =================================================================
+      // FUNGSI KELOLA DATA USER (TAMBAH, EDIT, HAPUS)
+      // =================================================================
+      window.openUserModal = function(dataStr) {
+          document.getElementById('frm-user').reset();
+          document.getElementById('mu-id').value = '';
+          if(dataStr) {
+              try {
+                  const u = JSON.parse(decodeURIComponent(dataStr));
+                  document.getElementById('mu-id').value = u.ID || '';
+                  document.getElementById('mu-nama').value = u.Nama || '';
+                  document.getElementById('mu-user').value = u.Username || '';
+                  document.getElementById('mu-pass').value = u.Password || '';
+                  document.getElementById('mu-role').value = (u.Role || 'siswa').toLowerCase();
+                  document.getElementById('mu-kelas').value = u.Kelas || '';
+                  document.getElementById('mu-sekolah').value = u.Sekolah || '';
+              } catch(e) {}
+          }
+          window.openModal('modalUser');
+      };
 
+      window.saveUser = async function() {
+          const data = {
+              id: document.getElementById('mu-id').value,
+              nama: document.getElementById('mu-nama').value,
+              username: document.getElementById('mu-user').value,
+              password: document.getElementById('mu-pass').value,
+              role: document.getElementById('mu-role').value,
+              kelas: document.getElementById('mu-kelas').value,
+              sekolah: document.getElementById('mu-sekolah').value
+          };
+
+          if(!data.nama || !data.username || !data.password) {
+              return window.Swal.fire('Error', 'Nama, Username, dan Password wajib diisi!', 'warning');
+          }
+
+          const btn = document.querySelector('#frm-user button[type="submit"]');
+          const origText = btn.innerHTML;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Menyimpan...';
+          btn.disabled = true;
+
+          try {
+              const req = await fetch('/api/cbt', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'adminManageUser', args: ['save', data] })
+              });
+              const res = await req.json();
+              
+              if(res.status === 'success') {
+                  window.closeModal('modalUser');
+                  window.toast('success', 'Data User berhasil disimpan!');
+                  window.loadPage('admin-users'); // Auto-refresh tabel
+              } else {
+                  window.Swal.fire('Error', res.msg, 'error');
+              }
+          } catch(err) {
+              window.Swal.fire('Error', err.message, 'error');
+          } finally {
+              btn.innerHTML = origText;
+              btn.disabled = false;
+          }
+      };
+
+      window.delUser = async function(id) {
+          const r = await window.Swal.fire({
+              title: 'Hapus User?',
+              text: "Siswa ini tidak akan bisa login lagi. Lanjutkan?",
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonColor: '#d33',
+              confirmButtonText: 'Ya, Hapus!'
+          });
+
+          if(r.isConfirmed) {
+              window.showLoad(true);
+              try {
+                  const req = await fetch('/api/cbt', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'adminManageUser', args: ['delete', { id: id }] })
+                  });
+                  const res = await req.json();
+                  
+                  if(res.status === 'success') {
+                      window.toast('success', 'User berhasil dihapus!');
+                      window.loadPage('admin-users'); // Auto-refresh tabel
+                  } else {
+                      window.Swal.fire('Error', res.msg, 'error');
+                  }
+              } catch(err) {
+                  window.Swal.fire('Error', err.message, 'error');
+              } finally {
+                  window.showLoad(false);
+              }
+          }
+      };
       window.bulkDeleteRekap = function() {
           const rids = [];
           $('.cb-rekap:checked').each(function(){ rids.push($(this).val()); });
