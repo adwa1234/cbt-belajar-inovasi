@@ -1777,82 +1777,7 @@ window.genOptRow = function(uid, type, val='', checked='') {
                   </div>`; 
       };
       
-      window.saveQBlock = async function(uid) {
-          const form = $('#frm-q-'+uid); 
-          const type = form.find('select[name="type"]').val(); 
-          const text = $('#sn-'+uid).summernote('code');
-          const score = form.find('input[name="score"]').val(); 
-          const num = form.find('input[name="num"]').val();
-          const id = form.find('input[name="id"]').val(); 
-          let opts=[], keys=[], keyIndices=[];
-          
-          if (type === 'PGS' || type === 'PGK') { 
-              $('#opts-wrap-'+uid+' .ans-row').each(function(){ 
-                  const v = $(this).find('.summernote-opt').summernote('code'); 
-                  if(v && v !== '<p><br></p>'){ 
-                      opts.push(v); 
-                      if($(this).find(`input[name="k_${uid}"]`).is(':checked')) { 
-                          keys.push(v); 
-                          keyIndices.push(opts.length - 1); 
-                      } 
-                  } 
-              });
-          } 
-          else if(type==='PGKK') { 
-              $('#pgkk-tbody-'+uid+' tr').each(function(){ 
-                  const q = $(this).find('.pgkk-q').summernote('code'); 
-                  if(q && q !== '<p><br></p>'){ 
-                      opts.push(q); 
-                      keys.push($(this).find('.pgkk-k').val()); 
-                  } 
-              });
-          } 
-          else if(type==='Menjodohkan') { 
-              $('#match-tbody-'+uid+' tr').each(function(){ 
-                  const l = $(this).find('.match-l').summernote('code'); 
-                  const r = $(this).find('.match-r').summernote('code'); 
-                  
-                  const cleanL = (l && l !== '<p><br></p>') ? l : '';
-                  const cleanR = (r && r !== '<p><br></p>') ? r : '';
-
-                  if(cleanR !== ''){ 
-                      opts.push(cleanL); 
-                      keys.push(cleanR); 
-                  } 
-              });
-          } 
-          else if(type==='Uraian') { 
-              const val = form.find('textarea[name="essay_key"]').val();
-              keys = val ? val.split(',').map(s => s.trim()) : [];
-          }
-          
-          const payload = { id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID }; 
-          
-          const btn = form.find('button.btn-success');
-          const origText = btn.html();
-          btn.prop('disabled',true).html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...');
-          
-          try {
-              const req = await fetch('/api/cbt', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ action: 'adminSaveSingleQuestion', args: [window.activeExamId, payload] })
-              });
-              const res = await req.json();
-              
-              if(res.status === 'success'){
-                  window.toast('success','Soal Disimpan!');
-                  window.toggleEditQ(uid); 
-                  await window.loadQList(); 
-              } else {
-                  window.Swal.fire('Error', res.msg, 'error');
-              }
-          } catch(err) {
-              window.Swal.fire('Error', err.message, 'error');
-          } finally {
-              btn.prop('disabled',false).html(origText);
-          }
-      };
-
+      
       window.renderQuestionBlock = function(q, idx) {
           const uid = q.QID ? q.QID : 'NEW_' + Math.random().toString(36).substr(2, 9);
           const nomor = q.Nomor || (idx + 1); const cleanPrev = (q.Pertanyaan || 'Soal Baru...').replace(/<[^>]+>/g, '').substring(0, 80) + '...';
@@ -1903,7 +1828,7 @@ window.genOptRow = function(uid, type, val='', checked='') {
           } 
       };
 
-      window.renderAnsFields = function(uid, type) { 
+window.renderAnsFields = function(uid, type) { 
           const block = $('#block-'+uid); let qData = {}; 
           try { qData = JSON.parse(decodeURIComponent(block.attr('data-q-obj'))); } catch(e){} 
           const opts = (qData.Tipe === type) ? JSON.parse(qData.Options || "[]") : [];
@@ -1939,10 +1864,12 @@ window.genOptRow = function(uid, type, val='', checked='') {
                   h += window.genOptRow(uid, inputType, '', '', 0); 
               }
               h += '</div>'; 
-          } else if (type === 'PGKK') { 
+          } 
+          else if (type === 'PGKK') { 
               h = `<table class="table table-sm"><thead><tr><th>Pernyataan</th><th>Kunci</th><th>X</th></tr></thead><tbody id="pgkk-tbody-${uid}">`; 
               if(opts.length) opts.forEach((o,i)=>h+=window.genPGKKRow(o,keys[i])); else h+=window.genPGKKRow(); h+=`</tbody></table><button type="button" class="btn btn-sm btn-info" onclick="window.addPGKKRowTo('${uid}')">+ Baris</button>`; 
-          } else if (type === 'Menjodohkan') { 
+          } 
+          else if (type === 'Menjodohkan') { 
               h = `<div class="alert alert-light small border mb-2"><i class="fas fa-info-circle me-1"></i> Biarkan kolom <b>Kiri</b> kosong jika kolom <b>Kanan</b> hanya sebagai jawaban pengecoh.</div>`;
               h += `<table class="table table-sm"><thead><tr><th>Kiri (Pernyataan)</th><th>Kanan (Kunci / Pengecoh)</th><th>X</th></tr></thead><tbody id="match-tbody-${uid}">`;
               let maxLen = Math.max(opts.length, keys.length);
@@ -1952,22 +1879,16 @@ window.genOptRow = function(uid, type, val='', checked='') {
                   h += window.genMatchRow();
               }
               h += `</tbody></table><button type="button" class="btn btn-sm btn-info" onclick="window.addMatchRowTo('${uid}')">+ Baris Pasangan</button>`;
-          }
-      } else if (type === 'Uraian') { 
+          } 
+          else if (type === 'Uraian') { 
               h = `<textarea class="form-control" name="essay_key" placeholder="Kata kunci penilaian (dipisah koma)">${keys.join(',')}</textarea>`; 
           } 
           
           document.getElementById('ans-area-'+uid).innerHTML = h; 
           
-          // =================================================================
-          // FIX BROWSER CACHE: Paksa status checked via Javascript
-          // Ini akan mencegah browser melakukan salah check pada radio button
-          // =================================================================
+          // FIX BROWSER CACHE
           if (type === 'PGS' || type === 'PGK') {
-              // 1. Matikan semua checklist terlebih dahulu (Reset)
               $(`#opts-wrap-${uid} .opt-radio-checkbox`).prop('checked', false);
-              
-              // 2. Hidupkan (centang) hanya pada opsi yang datanya persis dengan database
               checkedIndices.forEach(idx => {
                   $(`#opts-wrap-${uid} .ans-row`).eq(idx).find('.opt-radio-checkbox').prop('checked', true);
               });
@@ -1975,6 +1896,83 @@ window.genOptRow = function(uid, type, val='', checked='') {
 
           const MathButtonSm = function (context) { const ui = $.summernote.ui; return ui.button({ contents: '<i class="fas fa-square-root-alt"></i>', tooltip: 'Rumus', click: function () { window.Swal.fire({ title: 'LaTeX', html: `<textarea id="swal-math-input" class="form-control"></textarea>`, showCancelButton: true }).then((result) => { if (result.isConfirmed) { const mathText = document.getElementById('swal-math-input').value; if(mathText) context.invoke('editor.insertText', ` $$ ${mathText}$$ `); } }); } }).render(); };
           $('#ans-area-'+uid+' .summernote-opt').summernote({ height: 100, toolbar: [['style', ['bold', 'italic']], ['insert', ['picture', 'math']]], buttons: { math: MathButtonSm } }); 
+      };
+
+
+      window.saveQBlock = async function(uid) {
+          const form = $('#frm-q-'+uid); 
+          const type = form.find('select[name="type"]').val(); 
+          const text = $('#sn-'+uid).summernote('code');
+          const score = form.find('input[name="score"]').val(); 
+          const num = form.find('input[name="num"]').val();
+          const id = form.find('input[name="id"]').val(); 
+          let opts=[], keys=[], keyIndices=[];
+          
+          if (type === 'PGS' || type === 'PGK') { 
+              $('#opts-wrap-'+uid+' .ans-row').each(function(){ 
+                  const v = $(this).find('.summernote-opt').summernote('code'); 
+                  if(v && v !== '<p><br></p>'){ 
+                      opts.push(v); 
+                      if($(this).find(`input[name="k_${uid}"]`).is(':checked')) { 
+                          keys.push(v); 
+                          keyIndices.push(opts.length - 1); 
+                      } 
+                  } 
+              });
+          } 
+          else if(type==='PGKK') { 
+              $('#pgkk-tbody-'+uid+' tr').each(function(){ 
+                  const q = $(this).find('.pgkk-q').summernote('code'); 
+                  if(q && q !== '<p><br></p>'){ 
+                      opts.push(q); 
+                      keys.push($(this).find('.pgkk-k').val()); 
+                  } 
+              });
+          } 
+          else if(type==='Menjodohkan') { 
+              $('#match-tbody-'+uid+' tr').each(function(){ 
+                  const l = $(this).find('.match-l').summernote('code'); 
+                  const r = $(this).find('.match-r').summernote('code'); 
+                  
+                  const cleanL = (l && l !== '<p><br></p>') ? l : '';
+                  const cleanR = (r && r !== '<p><br></p>') ? r : '';
+
+                  if(cleanR !== ''){ 
+                      opts.push(cleanL); 
+                      keys.push(cleanR); 
+                  } 
+              });
+          } 
+          else if(type==='Uraian') { 
+              const val = form.find('textarea[name="essay_key"]').val();
+              keys = val ? val.split(',').map(s => s.trim()) : [];
+          } 
+          
+          const payload = { id:id, num:num, type:type, text:text, options:opts, key:keys, keyIndices:keyIndices, score:score, userId: window.user.ID }; 
+          
+          const btn = form.find('button.btn-success');
+          const origText = btn.html();
+          btn.prop('disabled',true).html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...');
+          
+          try {
+              const req = await fetch('/api/cbt', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'adminSaveSingleQuestion', args: [window.activeExamId, payload] })
+              });
+              const res = await req.json();
+              
+              if(res.status === 'success'){
+                  window.toast('success','Soal Disimpan!');
+                  window.toggleEditQ(uid); 
+                  await window.loadQList(); 
+              } else {
+                  window.Swal.fire('Error', res.msg, 'error');
+              }
+          } catch(err) {
+              window.Swal.fire('Error', err.message, 'error');
+          } finally {
+              btn.prop('disabled',false).html(origText);
+          }
       };
 window.saveKoreksi = async function() {
           const rid = document.getElementById('kor-rid').value;
