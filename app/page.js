@@ -1410,15 +1410,23 @@ window.openKoreksi = function(rid) {
           document.getElementById('view-exam').style.display = 'flex';
           document.body.classList.add('exam-mode');
           
-          const c = $('#q-slides-container'); const g = $('#nav-grid'); c.empty(); g.empty();
+          const c = $('#q-slides-container'); 
+          const g = $('#nav-grid'); 
+          c.empty(); 
+          g.empty();
+
           qs.forEach((q,i) => {
               let inp = '';
+              
               if(q.Tipe==='PGKK') {
                   const opts = JSON.parse(q.Options||"[]");
                   inp = `<table class="table table-bordered tbl-pgkk mt-3 bg-white"><thead><tr class="table-light"><th>PERNYATAAN</th><th width="15%">BENAR</th><th width="15%">SALAH</th></tr></thead><tbody>`;
-                  opts.forEach((o,x)=> inp+=`<tr><td><div class="opt-content">${o}</div></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="B" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="S" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td></tr>`);
+                  opts.forEach((o,x)=> {
+                      inp+=`<tr><td><div class="opt-content">${o}</div></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="B" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td><td style="padding:0; vertical-align:middle;"><label class="d-flex w-100 h-100 justify-content-center align-items-center m-0 clickable-opt" style="padding: 15px;"><input class="form-check-input m-0" type="radio" name="ans-${q.QID}-${x}" value="S" onchange="window.saveAnsLocal('${q.QID}', 'PGKK', ${i})"></label></td></tr>`;
+                  });
                   inp += `</tbody></table>`;
-              } else if(q.Tipe==='Menjodohkan') {
+              } 
+              else if(q.Tipe==='Menjodohkan') {
                   const rawOpts = JSON.parse(q.Options||"[]"); 
                   const rItems = q.Extra || []; 
                   
@@ -1438,64 +1446,59 @@ window.openKoreksi = function(rid) {
                             <div class="match-col" id="col-r-${i}">${rightHtml}</div>
                          </div>
                          <div class="text-end mt-3"><button class="btn btn-sm btn-outline-warning shadow-sm" onclick="window.resetMatch(${i})"><i class="fas fa-undo me-1"></i> Reset Garis</button></div>`;
-              } else if(q.Tipe.includes('PG')) {
+              } 
+              else if(q.Tipe.includes('PG')) {
                   const opts = JSON.parse(q.Options||"[]");
-                  opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
-              } else {
+                  opts.forEach(o => {
+                      inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`;
+                  });
+              } 
+              else {
                   inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="window.saveAnsLocal('${q.QID}', 'ESSAY', ${i})"></textarea>`;
               }
               
               c.append(`<div class="q-slide hidden" id="sl-${i}" data-qid="${q.QID}" data-type="${q.Tipe}"><div class="badge bg-primary mb-3">Soal No. ${q.Nomor||i+1}</div><div class="mb-4 q-content lead">${q.Pertanyaan}</div>${inp}</div>`);
               g.append(`<button id="nb-${i}" class="q-nav-btn ${i===0?'active-q':''}" onclick="window.jump(${i})">${i+1}</button>`);
           });
-} else if(q.Tipe==='Menjodohkan') {
-                  const rawOpts = JSON.parse(q.Options||"[]"); 
-                  const rItems = q.Extra || []; 
-                  
-                  let leftHtml = '';
-                  rawOpts.forEach((t, Idx) => {
-                      if (t && t.trim() !== '') {
-                          leftHtml += `<div class="match-item match-left" data-idx="${Idx}" onclick="window.matchClick(${i}, 'l', ${Idx}, this)"><div class="opt-content">${t}</div></div>`;
-                      }
-                  });
-
-                  let rightHtml = rItems.map((t, Idx)=>`<div class="match-item match-right" data-idx="${Idx}" data-val="${encodeURIComponent(t)}" onclick="window.matchClick(${i}, 'r', ${Idx}, this)"><div class="opt-content">${t}</div></div>`).join('');
-
-                  inp = `<div class="match-container" id="match-area-${i}">
-                            <input type="hidden" id="ans-in-${i}" onchange="window.saveAnsLocal('${q.QID}', 'MATCH', ${i})">
-                            <svg class="match-svg" id="svg-${i}"></svg>
-                            <div class="match-col" id="col-l-${i}">${leftHtml}</div>
-                            <div class="match-col" id="col-r-${i}">${rightHtml}</div>
-                         </div>
-                         <div class="text-end mt-3"><button class="btn btn-sm btn-outline-warning shadow-sm" onclick="window.resetMatch(${i})"><i class="fas fa-undo me-1"></i> Reset Garis</button></div>`;
-              }
-          } else if(q.Tipe.includes('PG')) {
-                  const opts = JSON.parse(q.Options||"[]");
-                  opts.forEach(o => inp += `<label class="form-check p-3 border mb-2 rounded bg-white clickable-opt d-flex align-items-center w-100"><input class="form-check-input flex-shrink-0" type="${q.Tipe==='PGK'?'checkbox':'radio'}" name="ans-${q.QID}" value="${encodeURIComponent(o)}" onchange="window.saveAnsLocal('${q.QID}', '${q.Tipe}', ${i})"><div class="ms-3 flex-grow-1 opt-content mb-0">${o}</div></label>`);
-              } else inp = `<textarea class="form-control" rows="5" name="ans-${q.QID}" onchange="window.saveAnsLocal('${q.QID}', 'ESSAY', ${i})"></textarea>`;
-              c.append(`<div class="q-slide hidden" id="sl-${i}" data-qid="${q.QID}" data-type="${q.Tipe}"><div class="badge bg-primary mb-3">Soal No. ${q.Nomor||i+1}</div><div class="mb-4 q-content lead">${q.Pertanyaan}</div>${inp}</div>`);
-              g.append(`<button id="nb-${i}" class="q-nav-btn ${i===0?'active-q':''}" onclick="window.jump(${i})">${i+1}</button>`);
-          });
-          window.restoreAnswers(qs); window.jump(0);
+          
+          window.restoreAnswers(qs); 
+          window.jump(0);
           if(window.applyMathJax) window.applyMathJax();
           
           let startTime = Date.now();
-          if(isResume) { const storedState = JSON.parse(localStorage.getItem('cbt_active_exam') || '{}'); if(storedState && storedState.start) startTime = storedState.start; }
+          if(isResume) { 
+              const storedState = JSON.parse(localStorage.getItem('cbt_active_exam') || '{}'); 
+              if(storedState && storedState.start) startTime = storedState.start; 
+          }
           const endTime = startTime + (dur * 60000);
           
           clearInterval(window.timerInt);
           window.timerInt = setInterval(() => {
               const diff = Math.floor((endTime - Date.now()) / 1000);
-              if(diff <= 0) { window.submitExamButton(true); }
-              else { let m = Math.floor(diff/60), s = diff%60; $('#timer-disp').text(`${m}:${s<10?'0':''}${s}`); if(diff < 300) $('#timer-disp').addClass('text-danger fw-bold'); }
+              if(diff <= 0) { 
+                  window.submitExamButton(true); 
+              } else { 
+                  let m = Math.floor(diff/60), s = diff%60; 
+                  $('#timer-disp').text(`${m}:${s<10?'0':''}${s}`); 
+                  if(diff < 300) $('#timer-disp').addClass('text-danger fw-bold'); 
+              }
           }, 1000);
           
           clearInterval(window.monitorInterval);
-          window.monitorInterval = setInterval(() => { window.google.script.run.updateClientProgress(window.activeExamId, window.user.ID, $('.q-nav-btn.answered').length, window.totalQ); }, 20000);
+          window.monitorInterval = setInterval(() => { 
+              window.google.script.run.updateClientProgress(window.activeExamId, window.user.ID, $('.q-nav-btn.answered').length, window.totalQ); 
+          }, 20000);
+          
           clearInterval(window.autosaveInterval);
           window.autosaveInterval = setInterval(() => {
               const key = `ANS_${window.user.ID}_${window.activeExamId}`;
-              try { const stored = localStorage.getItem(key); if(stored) { let data = JSON.parse(decodeURIComponent(atob(stored))); window.google.script.run.autosaveAnswer(window.activeExamId, window.user.ID, JSON.stringify(data)); } } catch(e){}
+              try { 
+                  const stored = localStorage.getItem(key); 
+                  if(stored) { 
+                      let data = JSON.parse(decodeURIComponent(atob(stored))); 
+                      window.google.script.run.autosaveAnswer(window.activeExamId, window.user.ID, JSON.stringify(data)); 
+                  } 
+              } catch(e){}
           }, 60000);
       };
 
@@ -1788,14 +1791,14 @@ window.genOptRow = function(uid, type, val='', checked='') {
                   const v = $(this).find('.summernote-opt').summernote('code'); 
                   if(v && v !== '<p><br></p>'){ 
                       opts.push(v); 
-                      // PERBAIKAN FINAL: Gunakan selector name spesifik untuk menangkap checked state
                       if($(this).find(`input[name="k_${uid}"]`).is(':checked')) { 
                           keys.push(v); 
                           keyIndices.push(opts.length - 1); 
                       } 
                   } 
               });
-          } else if(type==='PGKK') { 
+          } 
+          else if(type==='PGKK') { 
               $('#pgkk-tbody-'+uid+' tr').each(function(){ 
                   const q = $(this).find('.pgkk-q').summernote('code'); 
                   if(q && q !== '<p><br></p>'){ 
@@ -1803,12 +1806,12 @@ window.genOptRow = function(uid, type, val='', checked='') {
                       keys.push($(this).find('.pgkk-k').val()); 
                   } 
               });
-          } else if(type==='Menjodohkan') { 
+          } 
+          else if(type==='Menjodohkan') { 
               $('#match-tbody-'+uid+' tr').each(function(){ 
                   const l = $(this).find('.match-l').summernote('code'); 
                   const r = $(this).find('.match-r').summernote('code'); 
                   
-                  // L Boleh Kosong (Sebagai Pengecoh), R Wajib Isi
                   const cleanL = (l && l !== '<p><br></p>') ? l : '';
                   const cleanR = (r && r !== '<p><br></p>') ? r : '';
 
@@ -1817,7 +1820,8 @@ window.genOptRow = function(uid, type, val='', checked='') {
                       keys.push(cleanR); 
                   } 
               });
-          } else if(type==='Uraian') { 
+          } 
+          else if(type==='Uraian') { 
               const val = form.find('textarea[name="essay_key"]').val();
               keys = val ? val.split(',').map(s => s.trim()) : [];
           }
